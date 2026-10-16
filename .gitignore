@@ -1,0 +1,28 @@
+# Ignore local environment file containing personal passwords
+.env
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+#local data files
+azurite/*
+grafana/*
+localstack/*
+mariadb/*
+mongodb/*
+kafka*/*
+postgresql/*
+redis/*
+pgadmin/*
+pgdata/*
+postgres/*
+rabbitmq*/*
+sqlserver/*
+sonarqube-data/*
+sonarqube-logs/*
+redis-insight/*
+prometheus/*
+localgcp/*
+gcp-pubsub/*
+gcp-firestore/*
