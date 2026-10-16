@@ -1,5 +1,33 @@
 # 🚀 Universal Local Dev Infrastructure Stack
 
+[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-v2%2B-blue?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/masoodaaw/local-dev-stack/pulls)
+[![GitHub stars](https://img.shields.io/github/stars/masoodaaw/local-dev-stack?style=social)](https://github.com/masoodaaw/local-dev-stack/stargazers)
+
+## 📐 Network & Stack Architecture
+
+````text
+               +-------------------------------------------------------+
+               |                  HOST MACHINE                         |
+               |                                                       |
+               |   [ Browser UIs / Dev IDEs (.NET, Angular, Java) ]    |
+               +---------------------------+---------------------------+
+                                           |
+                                 (Host Port Mappings)
+                                           |
++------------------------------------------v------------------------------------------+
+|  Docker Network: dev-network                                                        |
+|                                                                                     |
+|  [ Datastores ]         [ Messaging ]         [ Emulators ]      [ Observability ]  |
+|  * PostgreSQL/pgvector  * Kafka Cluster       * AWS LocalStack   * OTel Collector   |
+|  * SQL Server 2022      * RabbitMQ HA Cluster * Azure Azurite    * Jaeger Tracing   |
+|  * MongoDB & MariaDB                          * GCP PubSub/DS    * Prometheus       |
+|  * Redis & CosmosDB                                              * Grafana & Sonar  |
++-------------------------------------------------------------------------------------+
+
+
+
 An all-in-one, single-command Docker Compose environment providing local infrastructure for enterprise application development. Run databases, cloud emulators, event streaming clusters, code quality analyzers, and OpenTelemetry observability locally without cloud costs or complex manual setups.
 
 ## 📦 What's Included
@@ -21,6 +49,11 @@ An all-in-one, single-command Docker Compose environment providing local infrast
 
 ### 2. Initialization
 
+### 3. Add an `.env.example` File
+
+copy .env.example to .env
+
+
 #### On Windows (PowerShell):
 
 ```powershell
@@ -30,7 +63,7 @@ docker network create dev-network
 
 # Launch the stack
 docker compose -f compose-file-name.yaml up -d
-```
+````
 
 ## 🛠️ Accessing Management Dashboards
 
