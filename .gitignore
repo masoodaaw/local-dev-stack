@@ -8,6 +8,17 @@ Thumbs.db
 #local data files
 azurite/*
 grafana/*
+!grafana/dashboards/
+!grafana/provisioning/
+grafana/dashboards/*
+!grafana/dashboards/*.json
+grafana/provisioning/*
+!grafana/provisioning/dashboards/
+!grafana/provisioning/datasources/
+grafana/provisioning/dashboards/*
+!grafana/provisioning/dashboards/*.yaml
+grafana/provisioning/datasources/*
+!grafana/provisioning/datasources/*.yaml
 localstack/*
 mariadb/*
 mongodb/*
@@ -23,7 +34,7 @@ sonarqube-data/*
 sonarqube-logs/*
 redis-insight/*
 prometheus/*
+loki/
 localgcp/*
 gcp-pubsub/*
 gcp-firestore/*
-

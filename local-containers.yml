@@ -11,6 +11,14 @@ networks:
   dev-network:
     external: true
 
+x-logging: &default-logging
+  driver: fluentd
+  options:
+    fluentd-address: "127.0.0.1:24224"
+    fluentd-async: "true"
+    fluentd-retry-wait: "1s"
+    tag: "{{.Name}}"
+
 services:
   # ==========================================
   # 1. PRIMARY DATABASES & STORAGE ENGINES
@@ -19,6 +27,7 @@ services:
     image: pgvector/pgvector:pg16
     container_name: dev-postgres
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5432:5432"
     environment:
@@ -35,6 +44,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: dev-sqlserver
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "1433:1433"
     environment:
@@ -50,6 +60,7 @@ services:
     image: mongo:7.0
     container_name: dev-mongodb
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "27017:27017"
     environment:
@@ -64,6 +75,7 @@ services:
     image: mariadb:11
     container_name: dev-mariadb
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "3306:3306"
     environment:
@@ -80,6 +92,7 @@ services:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-latest
     container_name: dev-cosmos
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8081:8080"
       - "10251-10255:10251-10255"
@@ -95,6 +108,7 @@ services:
     image: redis:7-alpine
     container_name: dev-redis
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "6379:6379"
     volumes:
@@ -109,6 +123,7 @@ services:
     image: sonarqube:community
     container_name: dev-sonarqube
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - postgres
     ports:
@@ -132,11 +147,13 @@ services:
     image: localstack/localstack:3.8
     container_name: dev-local-aws
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "4566:4566"
       - "4510-4559:4510-4559"
     environment:
-      - DEBUG=1- COMMUNITY_BUILD=1
+      - DEBUG=1
+      - COMMUNITY_BUILD=1
       - SERVICES=lambda,s3,sqs,sns,dynamodb,kinesis,apigateway
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_DEFAULT_REGION=us-east-1
@@ -150,6 +167,7 @@ services:
     image: google/cloud-sdk:emulators
     container_name: dev-local-gcp
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8095:8080"
     command: gcloud beta emulators datastore start --host-port=0.0.0.0:8080 --project=dev-project
@@ -162,6 +180,7 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite
     container_name: dev-azurite
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "10000:10000"
       - "10001:10001"
@@ -175,6 +194,7 @@ services:
     image: google/cloud-sdk:emulators
     container_name: dev-gcp-pubsub
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8085:8080"
     command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=dev-project
@@ -187,6 +207,7 @@ services:
     image: google/cloud-sdk:emulators
     container_name: dev-gcp-firestore
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8090:8090"
     command: gcloud beta emulators firestore start --host-port=0.0.0.0:8090
@@ -202,6 +223,7 @@ services:
     image: apache/kafka:latest
     container_name: dev-kafka-1
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9092:9092"
     environment:
@@ -228,6 +250,7 @@ services:
     image: apache/kafka:latest
     container_name: dev-kafka-2
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9093:9093"
     environment:
@@ -255,6 +278,7 @@ services:
     container_name: dev-rabbitmq-1
     hostname: rabbitmq-1
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -272,6 +296,7 @@ services:
     container_name: dev-rabbitmq-2
     hostname: rabbitmq-2
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5673:5672"
     environment:
@@ -286,6 +311,7 @@ services:
     container_name: dev-rabbitmq-3
     hostname: rabbitmq-3
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5674:5672"
     environment:
@@ -302,13 +328,18 @@ services:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: dev-otel-collector
     restart: unless-stopped
+    logging: *default-logging
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-config.yaml:/etc/otel-collector-config.yaml
     ports:
       - "4317:4317"
       - "4318:4318"
+      - "24224:24224"
       - "8889:8889"
+    depends_on:
+      - jaeger
+      - loki
     networks:
       - dev-network
 
@@ -316,6 +347,7 @@ services:
     image: jaegertracing/all-in-one:latest
     container_name: dev-jaeger
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "16686:16686"
     networks:
@@ -325,10 +357,14 @@ services:
     image: prom/prometheus:latest
     container_name: dev-prometheus
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9091:9090"
     volumes:
       - ${DATA_DIR}/prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
     networks:
       - dev-network
 
@@ -336,12 +372,30 @@ services:
     image: grafana/grafana:latest
     container_name: dev-grafana
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${DEV_PASS}
     volumes:
       - ${DATA_DIR}/grafana:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - dev-network
+
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: dev-loki
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["-config.file=/etc/loki/config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+      - ${DATA_DIR}/loki:/loki
     networks:
       - dev-network
 
@@ -352,6 +406,7 @@ services:
     image: adminer:latest
     container_name: dev-adminer
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8088:8080"
     networks:
@@ -361,6 +416,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: dev-pgadmin
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5050:80"
     environment:
@@ -375,6 +431,7 @@ services:
     image: redis/redisinsight:latest
     container_name: dev-redis-insight
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "5540:5540"
     volumes:
@@ -386,6 +443,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: dev-kafka-ui
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8082:8080"
     environment:
@@ -399,6 +457,7 @@ services:
     image: axllent/mailpit:latest
     container_name: dev-mailpit
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "1025:1025" # SMTP port
       - "8025:8025" # Web UI Dashboard
@@ -410,6 +469,7 @@ services:
     image: quay.io/keycloak/keycloak:latest
     container_name: dev-keycloak
     restart: unless-stopped
+    logging: *default-logging
     command: start-dev
     ports:
       - "8089:8080" # Host port mapped to 8081 if Cosmos uses 8081 via HTTPS

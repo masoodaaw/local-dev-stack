@@ -6,14 +6,33 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  fluentforward:
+    endpoint: 0.0.0.0:24224
+
 processors:
+  transform/service_name:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], attributes["fluent.tag"]) where attributes["fluent.tag"] != nil
+
   batch:
+    timeout: 1s
+    send_batch_size: 1024
 
 exporters:
+  debug:
+    verbosity: detailed
+
   otlp/jaeger:
-    endpoint: dev-jaeger:4317
+    endpoint: jaeger:4317
     tls:
       insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
   prometheus:
     endpoint: 0.0.0.0:8889
 
@@ -27,3 +46,7 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [prometheus]
+    logs:
+      receivers: [fluentforward, otlp]
+      processors: [transform/service_name, batch]
+      exporters: [otlphttp/loki]
