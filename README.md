@@ -93,6 +93,10 @@ Once the container stack is running, open the management UIs and dashboards from
 | **Jaeger Tracing** | [http://localhost:16686](http://localhost:16686) | N/A                                                     | Distributed tracing UI for searching spans and visualizing OpenTelemetry trace propagation.     |
 | **Grafana**        | [http://localhost:3000](http://localhost:3000)   | `admin` / `DEV_PASS` from `.env`                         | Explore logs, metrics, and traces; Loki, Prometheus, and Jaeger are provisioned as data sources. |
 | **Container Logs** | [Open dashboard](http://localhost:3000/d/container-logs/container-logs) | Sign in to Grafana first | Per-container log-volume, error, warning, and info charts, plus detailed log lines. |
+| **Database Audit** | [Open dashboard](http://localhost:3000/d/database-audit/database-audit) | Sign in to Grafana first | Separate PostgreSQL, MariaDB, and Redis activity streams and per-service volume. |
+| **Database Audit** | [Open dashboard](http://localhost:3000/d/database-audit/database-audit) | Sign in to Grafana first | Separate PostgreSQL, MariaDB, and Redis activity logs and per-service volume. |
+| **Service Activity** | [Open dashboard](http://localhost:3000/d/service-activity/service-activity) | Sign in to Grafana first | RabbitMQ, Kafka, MongoDB, and Cosmos emulator log activity and error-like lines. |
+| **Infrastructure Usage** | [Open dashboard](http://localhost:3000/d/infrastructure-usage/infrastructure-usage) | Sign in to Grafana first | Per-container CPU, memory, filesystem, network, and replica counts. |
 | **Loki**           | [http://localhost:3100](http://localhost:3100)   | N/A                                                     | Log storage and query API used by Grafana.                                                      |
 | **Prometheus**     | [http://localhost:9091](http://localhost:9091)   | N/A                                                     | Metrics collector and PromQL query console.                                                     |
 
@@ -113,6 +117,18 @@ In Grafana, open **Explore**, select **Loki**, and try these LogQL queries:
 ```
 
 The first query shows logs from all services, the second filters to one Compose service, and the third searches for common error-level text. Adjust the dashboard time range if a service has not emitted logs recently.
+
+The **Messaging and Document Service Activity** dashboard groups collected RabbitMQ, Kafka, MongoDB, and Cosmos emulator container logs. It charts log volume and error-like lines, with separate log panels for each service group. These are operational container logs, not complete audit records: broker logs do not include every published/consumed message body, MongoDB Community does not emit a full CRUD audit trail by default, and Cosmos emulator container logs do not guarantee request-level audit events. Use application instrumentation or service-specific audit facilities when complete activity records are required.
+
+The **Infrastructure Usage** dashboard uses cAdvisor metrics scraped by Prometheus to show CPU, memory, filesystem read/write throughput, network throughput, observed container counts, and Docker VM filesystem usage percentage. Container metrics are grouped by Compose service and container; replicas are shown separately and counted under their service. cAdvisor requires privileged access to Docker's Linux container metadata. On Docker Desktop for Windows, container metrics are for the Linux VM, not total Windows host usage. The disk percentage panel reports block devices visible inside that VM; it is not per-container volume capacity or the Windows drive percentage. Filesystem I/O is throughput, not storage capacity, and does not reliably break down `${DATA_DIR}` bind-mounted usage. For a remote scale set, deploy an exporter on each host and configure Prometheus service discovery/scraping for those hosts; this local dashboard does not automatically discover remote scale-set instances.
+
+## Database Activity Logs
+
+The **Database Audit Logs** dashboard is a separate view for file-based activity streams. PostgreSQL writes JSON statement and connection logs under its data directory; MariaDB writes its general query log there; a Redis MONITOR sidecar writes command activity to `${DATA_DIR}/redis-audit`. The Collector tails these files and sends them to Loki with `log.type=database_audit` metadata. Each database has its own log panel.
+
+This is intended for local development and troubleshooting, not compliance-grade audit retention. Full statement/command logging may capture sensitive values, increase disk usage, and affect performance. Redis MONITOR in particular can significantly reduce throughput. Protect the `DATA_DIR` and Grafana/Loki access, and stop or disable the corresponding audit logging when it is not needed. PostgreSQL rotates logs by age/size and Redis rotates its activity file; review and manage MariaDB general-log growth in `${DATA_DIR}/mariadb/audit.log`.
+
+Full native audit files are not enabled for every database in this stack: MongoDB Community does not provide MongoDB Enterprise's audit facility, SQL Server native `.sqlaudit` files need a SQL Server-aware exporter rather than the text file receiver, and the Cosmos emulator does not expose request-level audit records as a supported text file in this configuration. These engines' ordinary container logs continue through the existing stdout/stderr path.
 
 ---
 

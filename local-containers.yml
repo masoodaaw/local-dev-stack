@@ -11,6 +11,8 @@ networks:
   dev-network:
     external: true
 
+name: dev-containers
+
 x-logging: &default-logging
   driver: fluentd
   options:
@@ -28,6 +30,26 @@ services:
     container_name: dev-postgres
     restart: unless-stopped
     logging: *default-logging
+    command:
+      - postgres
+      - -c
+      - logging_collector=on
+      - -c
+      - log_destination=jsonlog
+      - -c
+      - log_directory=log
+      - -c
+      - log_filename=postgresql-%Y-%m-%d_%H%M%S.audit
+      - -c
+      - log_rotation_age=1d
+      - -c
+      - log_rotation_size=100MB
+      - -c
+      - log_statement=all
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
     ports:
       - "5432:5432"
     environment:
@@ -76,6 +98,11 @@ services:
     container_name: dev-mariadb
     restart: unless-stopped
     logging: *default-logging
+    command:
+      - mariadbd
+      - --general-log=ON
+      - --general-log-file=/var/lib/mysql/audit.log
+      - --log-output=FILE
     ports:
       - "3306:3306"
     environment:
@@ -113,6 +140,58 @@ services:
       - "6379:6379"
     volumes:
       - ${DATA_DIR}/redis:/data
+    networks:
+      - dev-network
+
+  redis-audit:
+    image: redis:7-alpine
+    container_name: dev-redis-audit
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command:
+      - sh
+      - -c
+      - |
+        umask 022
+        audit_file=/var/log/audit/redis/commands.log
+        while true; do
+          redis-cli -h redis MONITOR | while IFS= read -r entry; do
+            printf '%s\n' "$$entry" >> "$$audit_file"
+            if [ "$$(wc -c < "$$audit_file")" -ge 52428800 ]; then
+              mv "$$audit_file" "$$audit_file.$$(date +%s)"
+            fi
+          done
+          find /var/log/audit/redis -type f -name 'commands.log.*' -mtime +7 -delete
+          sleep 1
+        done
+    volumes:
+      - ${DATA_DIR}/redis-audit:/var/log/audit/redis
+    networks:
+      - dev-network
+
+  audit-log-permissions:
+    image: redis:7-alpine
+    container_name: dev-audit-log-permissions
+    restart: unless-stopped
+    user: "999:999"
+    depends_on:
+      - postgres
+      - mariadb
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          chmod 711 /var/lib/postgresql/data 2>/dev/null || true
+          chmod 755 /var/lib/postgresql/data/log 2>/dev/null || true
+          chmod 644 /var/lib/postgresql/data/log/*.json 2>/dev/null || true
+          chmod 644 /var/lib/mysql/audit.log 2>/dev/null || true
+          sleep 2
+        done
+    volumes:
+      - ${DATA_DIR}/postgres:/var/lib/postgresql/data
+      - ${DATA_DIR}/mariadb:/var/lib/mysql
     networks:
       - dev-network
 
@@ -332,6 +411,9 @@ services:
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-config.yaml:/etc/otel-collector-config.yaml
+      - ${DATA_DIR}/postgres:/var/lib/postgresql/data:ro
+      - ${DATA_DIR}/mariadb:/var/lib/mysql:ro
+      - ${DATA_DIR}/redis-audit:/var/log/audit/redis:ro
     ports:
       - "4317:4317"
       - "4318:4318"
@@ -365,6 +447,25 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - dev-network
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: dev-cadvisor
+    restart: unless-stopped
+    logging: *default-logging
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --store_container_labels=true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
     networks:
       - dev-network
 
