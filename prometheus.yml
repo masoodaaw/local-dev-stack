@@ -10,3 +10,8 @@ scrape_configs:
     scrape_interval: 15s
     static_configs:
       - targets: [cadvisor:8080]
+
+  - job_name: docker-container-status
+    scrape_interval: 10s
+    static_configs:
+      - targets: [container-status-exporter:9273]

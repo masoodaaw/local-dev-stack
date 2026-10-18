@@ -1,0 +1,212 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Live Docker Engine state for containers belonging to the dev-containers Compose project. Telegraf polls all states through a read-only Docker API proxy.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "container_status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "created": {
+                        "text": "⚪ CREATED",
+                        "color": "blue"
+                      },
+                      "restarting": {
+                        "text": "🟠 RESTARTING",
+                        "color": "orange"
+                      },
+                      "running": {
+                        "text": "🟢 RUNNING",
+                        "color": "green"
+                      },
+                      "removing": {
+                        "text": "🟠 REMOVING",
+                        "color": "orange"
+                      },
+                      "paused": {
+                        "text": "🟡 PAUSED",
+                        "color": "yellow"
+                      },
+                      "exited": {
+                        "text": "🔴 EXITED",
+                        "color": "red"
+                      },
+                      "dead": {
+                        "text": "⚫ DEAD",
+                        "color": "dark-red"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "__name__"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "instance"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Container state"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "docker_container_status_exitcode{com_docker_compose_project=\"dev-containers\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{container_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Docker container status — dev-containers",
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "container_id": true,
+              "container_image": true,
+              "container_version": true,
+              "engine_host": true,
+              "server_version": true,
+              "com_docker_compose_project": true,
+              "com_docker_compose_project_config_files": true,
+              "status_code": true
+            },
+            "indexByName": {
+              "container_name": 0,
+              "com_docker_compose_service": 1,
+              "container_status": 2,
+              "exitcode": 3
+            },
+            "renameByName": {
+              "com_docker_compose_service": "Compose service",
+              "container_name": "Container",
+              "container_status": "Docker state"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": [
+    "docker",
+    "container-status",
+    "prometheus"
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Container Status — dev-containers",
+  "uid": "container-status",
+  "version": 1
+}

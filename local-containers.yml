@@ -469,6 +469,32 @@ services:
     networks:
       - dev-network
 
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: dev-docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      INFO: "1"
+      POST: "0"
+      LOG_LEVEL: info
+    volumes:
+      - //var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - dev-network
+
+  container-status-exporter:
+    image: telegraf:1.40.2
+    container_name: dev-container-status-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - docker-socket-proxy
+    volumes:
+      - ./telegraf-docker-status.conf:/etc/telegraf/telegraf.conf:ro
+    networks:
+      - dev-network
+
   grafana:
     image: grafana/grafana:latest
     container_name: dev-grafana
