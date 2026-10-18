@@ -84,7 +84,7 @@ Once the container stack is running, open the management UIs and dashboards from
 
 | Service            | Host URL                                         | Default Credentials                                     | Description / Purpose                                                                           |
 | :----------------- | :----------------------------------------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------- |
-| **Adminer**        | [http://localhost:8088](http://localhost:8088)   | N/A                                                     | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
+| **Adminer**        | [http://localhost:8088](http://localhost:8088)   | use [dev-mariadb] as hostname when logging in to aminer | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
 | **pgAdmin 4**      | [http://localhost:5050](http://localhost:5050)   | `DEV_EMAIL` / `DEV_PASS` from `.env`                    | Full-featured PostgreSQL & `pgvector` management dashboard.                                     |
 | **Redis Insight**  | [http://localhost:5540](http://localhost:5540)   | N/A                                                     | Visual key-value inspector and memory performance profiler for Redis (`dev-redis:6379`).        |
 | **Kafka UI**       | [http://localhost:8082](http://localhost:8082)   | Pre-configured                                          | Real-time topic, partition, consumer group, and message inspector for the 2-node Kafka cluster. |
