@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080" role="img"
+    aria-labelledby="title desc">
+    <title id="title">OpenTelemetry to Grafana data flow</title>
+    <desc id="desc">Data flow for the local Docker Compose observability stack. Container and
+        database logs, OTLP metrics, and OTLP traces enter the OpenTelemetry Collector. Logs go to
+        Loki, metrics are exposed for Prometheus to scrape, and traces go to Jaeger. Prometheus also
+        scrapes cAdvisor and Telegraf. Grafana queries Loki, Prometheus, and Jaeger.</desc>
+    <defs>
+        <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f3f7f5" />
+            <stop offset="1" stop-color="#eaf0f3" />
+        </linearGradient>
+        <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#203641" flood-opacity=".10" />
+        </filter>
+        <marker id="arrowLogs" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0L9 4.5L0 9z" fill="#bd704f" />
+        </marker>
+        <marker id="arrowMetrics" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0L9 4.5L0 9z" fill="#397c68" />
+        </marker>
+        <marker id="arrowTraces" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0L9 4.5L0 9z" fill="#557ea2" />
+        </marker>
+        <marker id="arrowQuery" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0 0L9 4.5L0 9z" fill="#66758a" />
+        </marker>
+        <style>
+      text { font-family: "Segoe UI", "Aptos", sans-serif; fill: #19343b; }
+      .title { font-size: 32px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #5d7479; }
+      .section { font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+      .name { font-size: 16px; font-weight: 700; }
+      .body { font-size: 13px; fill: #536b70; }
+      .small { font-size: 11px; fill: #61777b; }
+      .mono { font-family: Consolas, "SFMono-Regular", monospace; font-size: 11px; fill: #526a70; }
+    .on-dark { fill: #ffffff; }
+    .on-dark-muted { fill: #c5d9d6; }
+    .on-dark-mono { fill: #d6e7e1; }
+      .card { fill: #fff; stroke: #d8e3e0; stroke-width: 1.2; }
+      .connector { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .dash { stroke-dasharray: 7 7; }
+    </style>
+    </defs>
+
+    <rect width="1600" height="1080" fill="url(#background)" />
+    <circle cx="1505" cy="78" r="128" fill="#d7e8e1" opacity=".46" />
+    <circle cx="68" cy="1015" r="155" fill="#dce8ef" opacity=".42" />
+
+    <text x="72" y="72" class="section" fill="#43836e">LOCAL DOCKER COMPOSE OBSERVABILITY</text>
+    <text x="72" y="119" class="title">OpenTelemetry to Grafana data flow</text>
+    <text x="72" y="150" class="subtitle">Collection, storage, scraping, and dashboard queries on
+        the shared dev-network</text>
+
+    <rect x="62" y="184" width="1476" height="805" rx="22" fill="#ffffff" fill-opacity=".72"
+        stroke="#cbdad6" stroke-width="1.4" />
+    <rect x="84" y="202" width="162" height="28" rx="14" fill="#e5f0eb" />
+    <circle cx="101" cy="216" r="4" fill="#43836e" />
+    <text x="114" y="220" class="section" fill="#3d705e">DEV-NETWORK</text>
+    <text x="1512" y="221" text-anchor="end" class="mono">Compose services resolve by service name</text>
+
+    <!-- Ingestion sources -->
+    <text x="100" y="277" class="section" fill="#627a7e">SIGNALS IN</text>
+
+    <g filter="url(#shadow)">
+        <rect x="96" y="301" width="322" height="146" rx="13" class="card" />
+        <rect x="96" y="301" width="6" height="146" rx="3" fill="#bd704f" />
+    </g>
+    <circle cx="127" cy="334" r="10" fill="#bd704f" />
+    <path d="M122 332h10v7h-10zM122 332l5 4 5-4" fill="none" stroke="#fff" stroke-width="1.2" />
+    <text x="148" y="340" class="name">Container logs</text>
+    <text x="122" y="373" class="body">Docker Fluent Forward logging driver</text>
+    <text x="122" y="397" class="mono">Collector receiver :24224</text>
+    <text x="122" y="425" class="small">Compose stdout and stderr</text>
+
+    <g filter="url(#shadow)">
+        <rect x="96" y="469" width="322" height="154" rx="13" class="card" />
+        <rect x="96" y="469" width="6" height="154" rx="3" fill="#bd704f" />
+    </g>
+    <circle cx="127" cy="502" r="10" fill="#bd704f" />
+    <path d="M123 497h8v10h-8zM125 500h4m-4 3h4" fill="none" stroke="#fff" stroke-width="1.1" />
+    <text x="148" y="508" class="name">Database activity files</text>
+    <text x="122" y="541" class="body">PostgreSQL JSON · MariaDB general log</text>
+    <text x="122" y="565" class="body">Redis MONITOR command log</text>
+    <text x="122" y="593" class="mono">Collector file_log receivers</text>
+
+    <g filter="url(#shadow)">
+        <rect x="96" y="645" width="322" height="146" rx="13" class="card" />
+        <rect x="96" y="645" width="6" height="146" rx="3" fill="#557ea2" />
+    </g>
+    <circle cx="127" cy="678" r="10" fill="#557ea2" />
+    <path d="M122 679h10m-5-5v10m-4-8 8 6m0-6-8 6" fill="none" stroke="#fff" stroke-width="1.2" />
+    <text x="148" y="684" class="name">Application telemetry</text>
+    <text x="122" y="717" class="body">OTLP logs · metrics · traces</text>
+    <text x="122" y="741" class="mono">gRPC :4317 · HTTP :4318</text>
+    <text x="122" y="769" class="small">Apps and SDKs send to the Collector</text>
+
+    <!-- OpenTelemetry Collector -->
+    <g filter="url(#shadow)">
+        <rect x="520" y="337" width="348" height="362" rx="18" fill="#183f46" />
+    </g>
+    <rect x="548" y="363" width="154" height="27" rx="13.5" fill="#dff0e8" />
+    <circle cx="565" cy="376.5" r="4" fill="#43836e" />
+    <text x="578" y="380" class="section" fill="#376b57">COLLECT · PROCESS</text>
+    <text x="548" y="431" class="on-dark" font-size="24" font-weight="700">OpenTelemetry</text>
+    <text x="548" y="462" class="on-dark" font-size="24" font-weight="700">Collector</text>
+    <text x="548" y="494" class="on-dark-muted" font-size="13">Receivers → processors → exporters</text>
+    <line x1="548" y1="519" x2="840" y2="519" stroke="#52736f" />
+    <circle cx="558" cy="550" r="5" fill="#bd8063" />
+    <text x="575" y="555" class="on-dark" font-size="13">Logs: Fluent Forward, OTLP, file_log</text>
+    <circle cx="558" cy="587" r="5" fill="#72b39a" />
+    <text x="575" y="592" class="on-dark" font-size="13">Metrics: OTLP → Prometheus exporter</text>
+    <circle cx="558" cy="624" r="5" fill="#83a7c5" />
+    <text x="575" y="629" class="on-dark" font-size="13">Traces: OTLP → Jaeger exporter</text>
+    <rect x="548" y="653" width="292" height="27" rx="6" fill="#28545a" />
+    <text x="694" y="671" text-anchor="middle" class="mono on-dark-mono">otel-config.yaml</text>
+
+    <!-- Signal intake paths -->
+    <path d="M418 372H472V389H520" class="connector" stroke="#bd704f" marker-end="url(#arrowLogs)" />
+    <path d="M418 546H462V509H485V414H520" class="connector" stroke="#bd704f"
+        marker-end="url(#arrowLogs)" />
+    <path d="M418 718H475V665H500V457H520" class="connector" stroke="#557ea2"
+        marker-end="url(#arrowTraces)" />
+    <rect x="434" y="341" width="92" height="24" rx="12" fill="#faeee9" />
+    <text x="480" y="357" text-anchor="middle" class="small" fill="#9f5f45">LOGS</text>
+    <rect x="435" y="687" width="90" height="24" rx="12" fill="#eaf0f6" />
+    <text x="480" y="703" text-anchor="middle" class="small" fill="#4e7393">OTLP</text>
+
+    <!-- Signal backends -->
+    <text x="953" y="277" class="section" fill="#627a7e">STORE &amp; SERVE</text>
+    <g filter="url(#shadow)">
+        <rect x="947" y="301" width="258" height="130" rx="13" class="card" />
+        <rect x="947" y="301" width="6" height="130" rx="3" fill="#bd704f" />
+        <rect x="947" y="454" width="258" height="130" rx="13" class="card" />
+        <rect x="947" y="454" width="6" height="130" rx="3" fill="#397c68" />
+        <rect x="947" y="607" width="258" height="130" rx="13" class="card" />
+        <rect x="947" y="607" width="6" height="130" rx="3" fill="#557ea2" />
+    </g>
+    <text x="974" y="344" class="name">Loki</text>
+    <text x="974" y="372" class="body">Log storage and LogQL queries</text>
+    <text x="974" y="402" class="mono">http://loki:3100/otlp</text>
+    <text x="974" y="497" class="name">Prometheus</text>
+    <text x="974" y="525" class="body">Scrapes metrics · PromQL queries</text>
+    <text x="974" y="555" class="mono">http://prometheus:9090</text>
+    <text x="974" y="650" class="name">Jaeger</text>
+    <text x="974" y="678" class="body">Trace storage and trace search</text>
+    <text x="974" y="708" class="mono">OTLP gRPC · jaeger:4317</text>
+
+    <!-- Collector exports to backends -->
+    <path d="M868 389H905V366H947" class="connector" stroke="#bd704f" marker-end="url(#arrowLogs)" />
+    <path d="M868 536H914V519H947" class="connector" stroke="#397c68"
+        marker-end="url(#arrowMetrics)" />
+    <path d="M868 650H912V672H947" class="connector" stroke="#557ea2" marker-end="url(#arrowTraces)" />
+    <rect x="878" y="341" width="68" height="24" rx="12" fill="#faeee9" />
+    <text x="912" y="357" text-anchor="middle" class="small" fill="#9f5f45">OTLP/HTTP</text>
+    <rect x="875" y="489" width="73" height="24" rx="12" fill="#e7f1ec" />
+    <text x="911.5" y="505" text-anchor="middle" class="small" fill="#376d59">:8889</text>
+    <rect x="877" y="685" width="70" height="24" rx="12" fill="#eaf0f6" />
+    <text x="912" y="701" text-anchor="middle" class="small" fill="#4e7393">OTLP/gRPC</text>
+
+    <!-- Direct Prometheus scrape targets -->
+    <rect x="572" y="833" width="260" height="91" rx="12" class="card" />
+    <text x="596" y="869" class="name">cAdvisor</text>
+    <text x="596" y="896" class="body">Container resource metrics · :8080</text>
+    <rect x="572" y="940" width="260" height="42" rx="10" fill="#fff" stroke="#d8e3e0" />
+    <text x="592" y="967" class="body">Telegraf container-state metrics · :9273</text>
+    <path d="M832 877H886V552H947" class="connector dash" stroke="#397c68"
+        marker-end="url(#arrowMetrics)" />
+    <path d="M832 961H900V566H947" class="connector dash" stroke="#397c68"
+        marker-end="url(#arrowMetrics)" />
+    <rect x="841" y="822" width="91" height="24" rx="12" fill="#e7f1ec" />
+    <text x="886.5" y="838" text-anchor="middle" class="small" fill="#376d59">SCRAPE</text>
+
+    <!-- Grafana and query paths -->
+    <g filter="url(#shadow)">
+        <rect x="1263" y="354" width="218" height="280" rx="17" fill="#243e45" />
+    </g>
+    <circle cx="1301" cy="394" r="15" fill="#e2f0e9" />
+    <path d="M1293 396l5-7 5 7 5-7" fill="none" stroke="#43836e" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" />
+    <text x="1328" y="400" class="on-dark" font-size="23" font-weight="700">Grafana</text>
+    <text x="1292" y="439" class="on-dark-muted" font-size="13">Explore and dashboards</text>
+    <line x1="1292" y1="462" x2="1452" y2="462" stroke="#557078" />
+    <circle cx="1300" cy="492" r="5" fill="#bd8063" />
+    <text x="1316" y="497" class="on-dark" font-size="13">Logs · Loki</text>
+    <circle cx="1300" cy="530" r="5" fill="#72b39a" />
+    <text x="1316" y="535" class="on-dark" font-size="13">Metrics · Prometheus</text>
+    <circle cx="1300" cy="568" r="5" fill="#83a7c5" />
+    <text x="1316" y="573" class="on-dark" font-size="13">Traces · Jaeger</text>
+    <text x="1292" y="607" class="mono on-dark-mono">http://localhost:3000</text>
+
+    <path d="M1205 366H1235V454H1263" class="connector dash" stroke="#66758a"
+        marker-end="url(#arrowQuery)" />
+    <path d="M1205 519H1236V501H1263" class="connector dash" stroke="#66758a"
+        marker-end="url(#arrowQuery)" />
+    <path d="M1205 672H1236V548H1263" class="connector dash" stroke="#66758a"
+        marker-end="url(#arrowQuery)" />
+    <text x="1245" y="674" class="small" text-anchor="middle" fill="#5e6e80"
+        transform="rotate(-90 1245 674)">QUERY</text>
+
+    <rect x="1263" y="682" width="218" height="112" rx="12" fill="#e9f0ec" stroke="#cbdcd4" />
+    <text x="1284" y="715" class="section" fill="#376d59">PROVISIONED</text>
+    <text x="1284" y="744" class="body">Prometheus · Loki · Jaeger</text>
+    <text x="1284" y="772" class="small">Grafana datasource definitions</text>
+
+    <!-- Legend and config references -->
+    <line x1="97" y1="1012" x2="1503" y2="1012" stroke="#d7e2df" />
+    <path d="M101 1045h36" class="connector" stroke="#bd704f" marker-end="url(#arrowLogs)" />
+    <text x="149" y="1050" class="small">Logs</text>
+    <path d="M225 1045h36" class="connector" stroke="#397c68" marker-end="url(#arrowMetrics)" />
+    <text x="273" y="1050" class="small">Metrics</text>
+    <path d="M367 1045h36" class="connector" stroke="#557ea2" marker-end="url(#arrowTraces)" />
+    <text x="415" y="1050" class="small">Traces</text>
+    <path d="M500 1045h36" class="connector dash" stroke="#66758a" marker-end="url(#arrowQuery)" />
+    <text x="548" y="1050" class="small">Grafana queries</text>
+    <text x="1502" y="1050" text-anchor="end" class="mono">otel-config.yaml · prometheus.yml ·
+        Grafana provisioning</text>
+</svg>
