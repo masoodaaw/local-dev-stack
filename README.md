@@ -82,25 +82,24 @@ docker compose -f local-containers.yml down
 
 Once the container stack is running, open the management UIs and dashboards from your host browser:
 
-| Service            | Host URL                                         | Default Credentials                                     | Description / Purpose                                                                           |
-| :----------------- | :----------------------------------------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------- |
-| **Adminer**        | [http://localhost:8088](http://localhost:8088)   | N/A                                                     | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
-| **pgAdmin 4**      | [http://localhost:5050](http://localhost:5050)   | `DEV_EMAIL` / `DEV_PASS` from `.env`                    | Full-featured PostgreSQL & `pgvector` management dashboard.                                     |
-| **Redis Insight**  | [http://localhost:5540](http://localhost:5540)   | N/A                                                     | Visual key-value inspector and memory performance profiler for Redis (`dev-redis:6379`).        |
-| **Kafka UI**       | [http://localhost:8082](http://localhost:8082)   | Pre-configured                                          | Real-time topic, partition, consumer group, and message inspector for the 2-node Kafka cluster. |
-| **RabbitMQ UI**    | [http://localhost:15672](http://localhost:15672) | `DEV_USER` / `DEV_PASS` from `.env`                      | Management console for monitoring queues, exchanges, and bindings across the 3-node cluster. |
-| **SonarQube**      | [http://localhost:9000](http://localhost:9000)   | `admin` / `admin` _(Prompted to change on first login)_ | Code quality analysis, vulnerability scanning, and technical debt reporting.                    |
-| **Jaeger Tracing** | [http://localhost:16686](http://localhost:16686) | N/A                                                     | Distributed tracing UI for searching spans and visualizing OpenTelemetry trace propagation.     |
-| **Grafana**        | [http://localhost:3000](http://localhost:3000)   | `admin` / `DEV_PASS` from `.env`                         | Explore logs, metrics, and traces; Loki, Prometheus, and Jaeger are provisioned as data sources. |
+| Service            | Host URL                 | Default Credentials                                     | Description / Purpose                                                                           |
+| :----------------- | :----------------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------- |
+| **Adminer**        | [http://localhost:8088]  | use [dev-mariadb] as hostname when logging in to aminer | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
+| **pgAdmin 4**      | [http://localhost:5050]  | `DEV_EMAIL` / `DEV_PASS` from `.env`, for db use `DEV_USER`/`DEV_PASS` | Full-featured PostgreSQL & `pgvector` management dashboard.                                     |
+| **Redis Insight**  | [http://localhost:5540]  | N/A                                                     | Visual key-value inspector and memory performance profiler for Redis (`dev-redis:6379`).        |
+| **Kafka UI**       | [http://localhost:8082]  | Pre-configured                                          | Real-time topic, partition, consumer group, and message inspector for the 2-node Kafka cluster. |
+| **RabbitMQ UI**    | [http://localhost:15672] | `DEV_USER` / `DEV_PASS` from `.env`                      | Management console for monitoring queues, exchanges, and bindings across the 3-node cluster. |
+| **SonarQube**      | [http://localhost:9000]  | `admin` / `admin` _(Prompted to change on first login)_ | Code quality analysis, vulnerability scanning, and technical debt reporting.                    |
+| **Jaeger Tracing** | [http://localhost:16686] | N/A                                                     | Distributed tracing UI for searching spans and visualizing OpenTelemetry trace propagation.     |
+| **Grafana**        | [http://localhost:3000]  | `admin` / `DEV_PASS` from `.env`                         | Explore logs, metrics, and traces; Loki, Prometheus, and Jaeger are provisioned as data sources. |
+| **Loki**           | [http://localhost:3100]  | N/A                                                     | Log storage and query API used by Grafana.                                                      |
+| **Prometheus**     | [http://localhost:9091]  | N/A                                                     | Metrics collector and PromQL query console.                                                     |
 | **Container Logs** | [Open dashboard](http://localhost:3000/d/container-logs/container-logs) | Sign in to Grafana first | Per-container log-volume, error, warning, and info charts, plus detailed log lines. |
 | **Database Audit** | [Open dashboard](http://localhost:3000/d/database-audit/database-audit) | Sign in to Grafana first | Separate PostgreSQL, MariaDB, and Redis activity streams and per-service volume. |
 | **Database Audit** | [Open dashboard](http://localhost:3000/d/database-audit/database-audit) | Sign in to Grafana first | Separate PostgreSQL, MariaDB, and Redis activity logs and per-service volume. |
 | **Service Activity** | [Open dashboard](http://localhost:3000/d/service-activity/service-activity) | Sign in to Grafana first | RabbitMQ, Kafka, MongoDB, and Cosmos emulator log activity and error-like lines. |
 | **Infrastructure Usage** | [Open dashboard](http://localhost:3000/d/infrastructure-usage/infrastructure-usage) | Sign in to Grafana first | Per-container CPU, memory, filesystem, network, and replica counts. |
 | **Container Status** | [Open dashboard](http://localhost:3000/d/container-status/container-status) | Sign in to Grafana first | State badge and service name for every container in the `dev-containers` project. |
-| **Loki**           | [http://localhost:3100](http://localhost:3100)   | N/A                                                     | Log storage and query API used by Grafana.                                                      |
-| **Prometheus**     | [http://localhost:9091](http://localhost:9091)   | N/A                                                     | Metrics collector and PromQL query console.                                                     |
-
 ---
 
 ## Observability and Container Logs
