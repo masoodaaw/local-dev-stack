@@ -1,0 +1,95 @@
+# Replaces the stock default.conf through the official Nginx envsubst entrypoint.
+resolver 127.0.0.11 valid=10s;
+
+access_log /dev/stdout;
+error_log /dev/stderr warn;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        set $upstream_default http://default-app:80;
+        proxy_pass $upstream_default;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${NGINX_TLS_HOSTS};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+
+    ssl_certificate /etc/letsencrypt/live/${NGINX_PRIMARY_CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${NGINX_PRIMARY_CERT_NAME}/privkey.pem;
+    include /etc/nginx/custom/ssl-params.conf;
+
+    location / {
+        set $upstream_default http://default-app:80;
+        proxy_pass $upstream_default;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${NGINX_PRIMARY_HOSTS};
+
+    ssl_certificate /etc/letsencrypt/live/${NGINX_PRIMARY_CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${NGINX_PRIMARY_CERT_NAME}/privkey.pem;
+    include /etc/nginx/custom/ssl-params.conf;
+
+    location / {
+        set $upstream_default http://default-app:80;
+        proxy_pass $upstream_default;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${NGINX_SECONDARY_HOSTS};
+
+    ssl_certificate /etc/letsencrypt/live/${NGINX_SECONDARY_CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${NGINX_SECONDARY_CERT_NAME}/privkey.pem;
+    include /etc/nginx/custom/ssl-params.conf;
+
+    location / {
+        set $upstream_default http://default-app:80;
+        proxy_pass $upstream_default;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

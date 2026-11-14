@@ -1,5 +1,20 @@
 name: web-apps
 
+x-logging: &web-logging
+  driver: fluentd
+  options:
+    fluentd-address: "127.0.0.1:24224"
+    fluentd-async: "true"
+    fluentd-retry-wait: "1s"
+    tag: "{{.Name}}"
+
+x-web-healthcheck: &web-healthcheck
+  test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
 configs:
   ddclient-config:
     content: |
@@ -16,8 +31,9 @@ configs:
 services:
   # 1. Dynamic DNS Updater
   ddns-updater:
-    image: lscr.io/linuxserver/ddclient:latest
+    image: lscr.io/linuxserver/ddclient@sha256:8daff71cbdc8ef9b9e2db35617dcff250f3f219fe3f8110940107ceed0f9eb7b
     container_name: ddns-updater
+    logging: *web-logging
     user: "1000:1000"
     entrypoint: ["/usr/bin/ddclient"]
     command: ["--foreground", "--file", "/run/ddclient.conf", "--cache", "/tmp/ddclient.cache"]
@@ -31,15 +47,25 @@ services:
 
   # 2. Nginx Gateway & Load Balancer
   nginx-gateway:
-    image: nginx:alpine
+    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
     container_name: nginx-gateway
+    logging: *web-logging
+    healthcheck: *web-healthcheck
+    environment:
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx/conf.d
+      NGINX_ENVSUBST_FILTER: "^NGINX_"
+      NGINX_PRIMARY_HOSTS: ${NGINX_PRIMARY_HOSTS:?Set NGINX_PRIMARY_HOSTS in .env}
+      NGINX_PRIMARY_CERT_NAME: ${NGINX_PRIMARY_CERT_NAME:?Set NGINX_PRIMARY_CERT_NAME in .env}
+      NGINX_SECONDARY_HOSTS: ${NGINX_SECONDARY_HOSTS:-unused.invalid}
+      NGINX_SECONDARY_CERT_NAME: ${NGINX_SECONDARY_CERT_NAME:-unused.invalid}
+      NGINX_TLS_HOSTS: ${NGINX_TLS_HOSTS:?Set NGINX_TLS_HOSTS in .env}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - type: bind
-        source: ${REPO_DIR:-.}/nginx/conf.d
-        target: /etc/nginx/conf.d
+        source: ${REPO_DIR:-.}/nginx/templates
+        target: /etc/nginx/templates
         read_only: true
         bind:
           create_host_path: false
@@ -76,8 +102,9 @@ services:
 
   # 3. SSL Certificate Manager
   certbot:
-    image: neilpang/acme.sh:latest
+    image: neilpang/acme.sh@sha256:475e6c0f1fb861ea8011d7ab9dd3d7490d98540970827ecc36290a3afa411673
     container_name: certbot
+    logging: *web-logging
     pid: "service:nginx-gateway"
     depends_on:
       nginx-gateway:
@@ -101,8 +128,10 @@ services:
 
   # 4. Default Fallback Website
   default-app:
-    image: nginx:alpine
+    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
     container_name: default-app
+    logging: *web-logging
+    healthcheck: *web-healthcheck
     volumes:
       - type: bind
         source: ${REPO_DIR:-.}/default-site
@@ -118,7 +147,9 @@ services:
 
   # 5. Website 1 (Load Balanced across 2 replicas)
   site1-app:
-    image: nginx:alpine
+    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
+    logging: *web-logging
+    healthcheck: *web-healthcheck
     volumes:
       - type: bind
         source: ${DATA_DIR}/site1-data
@@ -136,7 +167,9 @@ services:
 
   # 6. Website 2 (Single container)
   site2-app:
-    image: nginx:alpine
+    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
+    logging: *web-logging
+    healthcheck: *web-healthcheck
     volumes:
       - type: bind
         source: ${DATA_DIR}/site2-data

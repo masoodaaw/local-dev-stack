@@ -138,34 +138,12 @@ duplicate updates. No host ddclient installation is needed.
 
 ### HTTPS for the default web site
 
-The web gateway serves the default site over HTTPS using a certificate for
-`myhomeworksheets.com`. The certificate only covers that hostname; other
-hostnames reaching the default site need their own certificates to avoid
-browser warnings. Forward TCP ports 80 and 443 to the Docker host. Port 80
-must remain reachable for Let's Encrypt HTTP-01 renewal.
-
-The gateway expects the certificate files under
-`${DATA_DIR}/certbot/conf/live/myhomeworksheets.com`. For a fresh installation,
-temporarily remove the HTTPS server block from `nginx/conf.d/sites.conf` and
-start the gateway and certificate manager with `docker compose -f web-apps.yml
-up -d`. After DNS and public HTTP access are working, issue and install the
-certificate:
-
-```bash
-docker exec certbot acme.sh --issue --server letsencrypt --webroot /var/www/certbot -d myhomeworksheets.com
-docker exec certbot mkdir -p /acme.sh/live/myhomeworksheets.com
-docker exec certbot acme.sh --install-cert -d myhomeworksheets.com --ecc \
-  --key-file /acme.sh/live/myhomeworksheets.com/privkey.pem \
-  --fullchain-file /acme.sh/live/myhomeworksheets.com/fullchain.pem \
-  --reloadcmd 'kill -HUP 1'
-```
-
-Restore the HTTPS server block, then run `docker exec nginx-gateway nginx -t`
-and `docker exec nginx-gateway nginx -s reload`. The certificate manager shares
-the gateway's process namespace so renewal can reload Nginx without access to
-the Docker socket. If the gateway container is recreated outside Compose,
-also recreate `certbot` to reconnect its process namespace. Check renewals
-with `docker exec certbot acme.sh --list` and the certificate manager logs.
+The gateway serves the default site for configured hostnames. Set its
+hostnames and certificate directory names in the ignored `.env` file.
+Each hostname must be included in the certificate served for it. Forward TCP
+ports 80 and 443 to the Docker host; port 80 must stay reachable for HTTP-01
+certificate issuance and renewal. See the [web apps setup guide](./WEB-APPS-HOWTO.md)
+for certificate installation and operations.
 
 ## 🛠️ Accessing Management Dashboards
 

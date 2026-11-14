@@ -1,9 +1,0 @@
-daemon=300
-syslog=no
-ssl=yes
-usev4=webv4, webv4=https://api.ipify.org/
-protocol=dyndns2
-server=dynv6.com
-login=none
-password='YOUR_DYNV6_HTTP_TOKEN'
-your-zone.dynv6.net
