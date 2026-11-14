@@ -1,19 +1,35 @@
 name: web-apps
 
+configs:
+  ddclient-config:
+    content: |
+      daemon=${DDCLIENT_DAEMON:-300}
+      syslog=${DDCLIENT_SYSLOG:-no}
+      ssl=${DDCLIENT_SSL:-yes}
+      usev4=${DDCLIENT_USEV4:-webv4}, webv4=${DDCLIENT_WEBV4:-https://api.ipify.org/}
+      protocol=${DDCLIENT_PROTOCOL:-dyndns2}
+      server=${DDCLIENT_SERVER:-dynv6.com}
+      login=${DDCLIENT_LOGIN:-none}
+      password='${DYNV6_TOKEN:-}'
+      ${DYNV6_ZONE:-}
+
 services:
-  # 1. Dynamic DNS Updater (Secrets & cache in /opt/dev-data)
+  # 1. Dynamic DNS Updater
   ddns-updater:
     image: lscr.io/linuxserver/ddclient:latest
     container_name: ddns-updater
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/Chicago
-    volumes:
-      - /opt/dev-data/ddclient:/config
+    user: "1000:1000"
+    entrypoint: ["/usr/bin/ddclient"]
+    command: ["--foreground", "--file", "/run/ddclient.conf", "--cache", "/tmp/ddclient.cache"]
+    configs:
+      - source: ddclient-config
+        target: /run/ddclient.conf
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
     restart: unless-stopped
 
-  # 2. Nginx Gateway & Load Balancer (Configs from /opt/repos, Certs & Logs from /opt/dev-data)
+  # 2. Nginx Gateway & Load Balancer
   nginx-gateway:
     image: nginx:alpine
     container_name: nginx-gateway
@@ -21,11 +37,35 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /opt/repos/local-dev-stack/nginx/conf.d:/etc/nginx/conf.d:ro
-      - /opt/repos/local-dev-stack/nginx/ssl-params.conf:/etc/nginx/custom/ssl-params.conf:ro
-      - /opt/dev-data/nginx/logs:/var/log/nginx
-      - /opt/dev-data/certbot/conf:/etc/letsencrypt:ro
-      - /opt/dev-data/certbot/www:/var/www/certbot:ro
+      - type: bind
+        source: ${REPO_DIR:-.}/nginx/conf.d
+        target: /etc/nginx/conf.d
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${REPO_DIR:-.}/nginx/ssl-params.conf
+        target: /etc/nginx/custom/ssl-params.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/nginx/logs
+        target: /var/log/nginx
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/certbot/conf
+        target: /etc/letsencrypt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/certbot/www
+        target: /var/www/certbot
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       - default-app
       - site1-app
@@ -34,35 +74,58 @@ services:
       - dev-network
     restart: unless-stopped
 
-  # 3. SSL Certificate Manager (Certs, API tokens & logs in /opt/dev-data)
+  # 3. SSL Certificate Manager
   certbot:
-    image: certbot/dns-cloudflare:latest
+    image: neilpang/acme.sh:latest
     container_name: certbot
+    pid: "service:nginx-gateway"
+    depends_on:
+      nginx-gateway:
+        condition: service_started
+        restart: true
+    environment:
+      - DYNV6_TOKEN=${DYNV6_TOKEN}
     volumes:
-      - /opt/dev-data/certbot/conf:/etc/letsencrypt
-      - /opt/dev-data/certbot/www:/var/www/certbot
-      - /opt/dev-data/certbot/logs:/var/log/letsencrypt
-      - /opt/dev-data/certbot/cloudflare.ini:/cloudflare.ini:ro
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+      - type: bind
+        source: ${DATA_DIR}/certbot/conf
+        target: /acme.sh
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/certbot/www
+        target: /var/www/certbot
+        bind:
+          create_host_path: false
+    command: daemon
     restart: unless-stopped
 
-  # 4. Default Fallback Website (Static template from /opt/repos)
+  # 4. Default Fallback Website
   default-app:
     image: nginx:alpine
     container_name: default-app
     volumes:
-      - /opt/repos/local-dev-stack/default-site:/usr/share/nginx/html:ro
+      - type: bind
+        source: ${REPO_DIR:-.}/default-site
+        target: /usr/share/nginx/html
+        read_only: true
+        bind:
+          create_host_path: false
     expose:
       - "80"
     networks:
       - dev-network
     restart: unless-stopped
 
-  # 5. Website 1 - Load Balanced Replicas (Content from /opt/dev-data)
+  # 5. Website 1 (Load Balanced across 2 replicas)
   site1-app:
     image: nginx:alpine
     volumes:
-      - /opt/dev-data/site1-data:/usr/share/nginx/html:ro
+      - type: bind
+        source: ${DATA_DIR}/site1-data
+        target: /usr/share/nginx/html
+        read_only: true
+        bind:
+          create_host_path: false
     expose:
       - "80"
     deploy:
@@ -71,11 +134,16 @@ services:
       - dev-network
     restart: unless-stopped
 
-  # 6. Website 2 - Single Container (Content from /opt/dev-data)
+  # 6. Website 2 (Single container)
   site2-app:
     image: nginx:alpine
     volumes:
-      - /opt/dev-data/site2-data:/usr/share/nginx/html:ro
+      - type: bind
+        source: ${DATA_DIR}/site2-data
+        target: /usr/share/nginx/html
+        read_only: true
+        bind:
+          create_host_path: false
     expose:
       - "80"
     networks:
@@ -85,5 +153,3 @@ services:
 networks:
   dev-network:
     external: true
-
-

@@ -78,6 +78,95 @@ To stop the stack without deleting persisted data:
 docker compose -f local-containers.yml down
 ```
 
+### dynv6 dynamic DNS (web-apps stack)
+
+For the complete setup and troubleshooting guide, see
+[Web apps setup and operations](./WEB-APPS-HOWTO.md) and its
+[architecture diagram](./web-apps-architecture.svg).
+
+The `ddns-updater` service in `web-apps.yml` runs ddclient in a container.
+The web-apps stack uses this repository as its default `REPO_DIR`; set
+`REPO_DIR` in `.env` only if its web assets live elsewhere.
+In the repository's `.env`, configure the ddclient settings, dynv6 zone name
+and HTTP token:
+
+```dotenv
+DDCLIENT_DAEMON=300
+DDCLIENT_SYSLOG=no
+DDCLIENT_SSL=yes
+DDCLIENT_USEV4=webv4
+DDCLIENT_WEBV4=https://api.ipify.org/
+DDCLIENT_PROTOCOL=dyndns2
+DDCLIENT_SERVER=dynv6.com
+DDCLIENT_LOGIN=none
+DYNV6_ZONE=your-zone.dynv6.net
+DYNV6_TOKEN=your-http-token
+```
+
+Compose 2.23.1 or later interpolates these values into a configuration mounted
+for ddclient; no setup script is needed. The daemon interval is in seconds.
+The settings above are the defaults when omitted, except the zone and token,
+which must be supplied. Enter a zone name without whitespace and an HTTP token
+without quotes or line breaks. `DDCLIENT_USEV4` and `DDCLIENT_WEBV4` configure
+IPv4 discovery; strategies requiring additional ddclient options are not
+configured by this service. Keep `.env` private; users with Docker access can
+also read the generated configuration. Compose stores its generated config on
+the Docker host. Some Compose versions warn that config ownership and mode
+are unsupported outside Swarm; verify the generated file is accessible only
+to the container user on your installation. Existing files in `${DATA_DIR}/ddclient` are not used or
+overwritten; remove obsolete files containing credentials when no longer needed.
+
+With the defaults, the updater checks the public IPv4 address every 300 seconds and updates
+dynv6 when it changes. Dynv6's DynDNS API is IPv4-only; it does not update
+AAAA records. Start and inspect just the updater without the other web services:
+
+```bash
+docker compose -f web-apps.yml up -d ddns-updater
+docker compose -f web-apps.yml logs -f ddns-updater
+```
+
+After changing `.env`, force recreation so Compose replaces the mounted config:
+
+```bash
+docker compose -f web-apps.yml up -d --force-recreate ddns-updater
+```
+
+`docker compose config` includes the token in its output; avoid sharing it.
+
+Disable any existing host or router updater for the same zone to avoid
+duplicate updates. No host ddclient installation is needed.
+
+### HTTPS for the default web site
+
+The web gateway serves the default site over HTTPS using a certificate for
+`myhomeworksheets.com`. The certificate only covers that hostname; other
+hostnames reaching the default site need their own certificates to avoid
+browser warnings. Forward TCP ports 80 and 443 to the Docker host. Port 80
+must remain reachable for Let's Encrypt HTTP-01 renewal.
+
+The gateway expects the certificate files under
+`${DATA_DIR}/certbot/conf/live/myhomeworksheets.com`. For a fresh installation,
+temporarily remove the HTTPS server block from `nginx/conf.d/sites.conf` and
+start the gateway and certificate manager with `docker compose -f web-apps.yml
+up -d`. After DNS and public HTTP access are working, issue and install the
+certificate:
+
+```bash
+docker exec certbot acme.sh --issue --server letsencrypt --webroot /var/www/certbot -d myhomeworksheets.com
+docker exec certbot mkdir -p /acme.sh/live/myhomeworksheets.com
+docker exec certbot acme.sh --install-cert -d myhomeworksheets.com --ecc \
+  --key-file /acme.sh/live/myhomeworksheets.com/privkey.pem \
+  --fullchain-file /acme.sh/live/myhomeworksheets.com/fullchain.pem \
+  --reloadcmd 'kill -HUP 1'
+```
+
+Restore the HTTPS server block, then run `docker exec nginx-gateway nginx -t`
+and `docker exec nginx-gateway nginx -s reload`. The certificate manager shares
+the gateway's process namespace so renewal can reload Nginx without access to
+the Docker socket. If the gateway container is recreated outside Compose,
+also recreate `certbot` to reconnect its process namespace. Check renewals
+with `docker exec certbot acme.sh --list` and the certificate manager logs.
+
 ## 🛠️ Accessing Management Dashboards
 
 Once the container stack is running, open the management UIs and dashboards from your host browser:
