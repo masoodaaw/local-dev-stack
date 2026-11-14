@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img"
+    aria-labelledby="title description">
+    <title id="title">Local Dev Stack Architecture</title>
+    <desc id="description">Local applications connect through host port mappings to databases,
+        messaging clusters, cloud emulators, and observability services on the shared Docker
+        dev-network. Repository: https://github.com/masoodaaw/local-dev-stack</desc>
+    <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#526277" />
+        </marker>
+        <style>
+      text { font-family: 'Segoe UI', sans-serif; fill: #182638; letter-spacing: 0; }
+      .heading { font-size: 23px; font-weight: 700; }
+      .body { font-size: 20px; }
+      .muted { font-size: 18px; fill: #526277; }
+      .connector { fill: none; stroke: #526277; stroke-width: 2; marker-end: url(#arrow); }
+    </style>
+    </defs>
+    <rect width="1200" height="900" fill="#f5f7fa" />
+    <rect width="1200" height="10" fill="#087f73" />
+    <text x="60" y="78" font-size="42" font-weight="700">Local Dev Stack</text>
+    <text x="60" y="114" class="muted">Docker Compose architecture | Local development and
+        experimentation</text>
+    <rect x="260" y="153" width="680" height="82" rx="8" fill="#ffffff" stroke="#b6c1ce" />
+    <text x="600" y="186" text-anchor="middle" class="heading">Host Machine</text>
+    <text x="600" y="216" text-anchor="middle" class="body">Applications, IDEs, and browser-based
+        management tools</text>
+    <path d="M600 235 V302" class="connector" />
+    <text x="620" y="276" class="muted">Host port mappings</text>
+    <rect x="40" y="304" width="1120" height="450" rx="8" fill="#ffffff" stroke="#b6c1ce"
+        stroke-width="2" />
+    <text x="66" y="342" class="heading">Shared Docker Network: dev-network</text>
+    <path d="M66 364 H1134" stroke="#dde3ea" />
+    <rect x="66" y="389" width="245" height="7" fill="#087f73" />
+    <text x="66" y="433" class="heading">Data</text>
+    <text x="66" y="476" class="body">
+        <tspan x="66">PostgreSQL + pgvector</tspan>
+        <tspan x="66" dy="35">SQL Server</tspan>
+        <tspan x="66" dy="35">MongoDB</tspan>
+        <tspan x="66" dy="35">MariaDB</tspan>
+        <tspan x="66" dy="35">Redis</tspan>
+        <tspan x="66" dy="35">Cosmos DB Emulator</tspan>
+    </text>
+    <rect x="340" y="389" width="245" height="7" fill="#c45438" />
+    <text x="340" y="433" class="heading">Messaging</text>
+    <text x="340" y="476" class="body">
+        <tspan x="340">Apache Kafka</tspan>
+        <tspan x="340" dy="30" class="muted">2-node KRaft cluster</tspan>
+        <tspan x="340" dy="51">RabbitMQ</tspan>
+        <tspan x="340" dy="30" class="muted">3-node cluster</tspan>
+    </text>
+    <rect x="614" y="389" width="245" height="7" fill="#3278b5" />
+    <text x="614" y="433" class="heading">Cloud Emulation</text>
+    <text x="614" y="476" class="body">
+        <tspan x="614">AWS LocalStack</tspan>
+        <tspan x="614" dy="35">Azure Azurite</tspan>
+        <tspan x="614" dy="35">GCP Pub/Sub</tspan>
+        <tspan x="614" dy="35">GCP Firestore</tspan>
+    </text>
+    <rect x="888" y="389" width="245" height="7" fill="#8b6a12" />
+    <text x="888" y="433" class="heading">Observability</text>
+    <text x="888" y="476" class="body">
+        <tspan x="888">OpenTelemetry</tspan>
+        <tspan x="888" dy="35">Jaeger</tspan>
+        <tspan x="888" dy="35">Prometheus</tspan>
+        <tspan x="888" dy="35">Loki + Grafana</tspan>
+        <tspan x="888" dy="51" class="muted">Code quality: SonarQube</tspan>
+    </text>
+    <text x="66" y="722" class="muted">Management UIs: pgAdmin, Adminer, Redis Insight, Kafka UI,
+        RabbitMQ Management</text>
+    <a href="https://github.com/masoodaaw/local-dev-stack" target="_blank" rel="noopener noreferrer">
+        <text x="60" y="811" font-size="25" font-weight="600"
+            style="fill:#087f73;text-decoration:underline">github.com/masoodaaw/local-dev-stack</text>
+    </a>
+    <text x="60" y="853" class="muted">Open source | MIT License | Local development only, not a
+        production deployment template</text>
+</svg>

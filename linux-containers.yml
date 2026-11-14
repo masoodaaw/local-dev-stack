@@ -1,0 +1,889 @@
+## docker compose -f local-containers.yml up -d
+## docker compose up -d postgres server mongodb redis
+## to launch everything: docker compose --profile "*" up -d
+## check for port conflicts docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+##Ensure no containers display Restarting (1).
+##
+##Confirm all web GUIs (Adminer 8088, pgAdmin 5050, Kafka UI 8082, RabbitMQ 15672, Jaeger 16686, Grafana 3000, SonarQube 9000) load in your browser.
+
+
+networks:
+  dev-network:
+    external: true
+
+name: dev-containers
+
+x-logging: &default-logging
+  driver: fluentd
+  options:
+    fluentd-address: "127.0.0.1:24224"
+    fluentd-async: "true"
+    fluentd-retry-wait: "1s"
+    tag: "{{.Name}}"
+
+services:
+  # 1. Fixes host directory ownership before SonarQube boots
+  init-sonar-permissions:
+    image: alpine:latest
+    container_name: "init-sonar-perms"
+    user: "0:0" # Executes as host root
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-data
+        target: /opt/sonarqube/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-extensions
+        target: /opt/sonarqube/extensions
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-logs
+        target: /opt/sonarqube/logs
+        bind:
+          create_host_path: false
+    command: >
+      chown -R 1000:1000 /opt/sonarqube/data /opt/sonarqube/extensions /opt/sonarqube/logs
+      
+  # Fixes host folder permissions & clears stale lock/socket files before Cosmos boots
+  init-cosmos-permissions:
+    image: alpine:latest
+    container_name: "init-cosmos-perms"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/cosmos
+        target: /data
+        bind:
+          create_host_path: false
+    command: >
+      sh -c "rm -rf /data/*.pid /data/db/*.pid /data/db/.s.PGSQL* /data/.s.PGSQL* && chmod -R 700 /data"    
+  
+  init-prom-wal:
+    image: alpine:latest
+    container_name: "init-prom-wal"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/prometheus
+        target: /prometheus
+        bind:
+          create_host_path: false
+    command: sh -c "rm -rf /prometheus/wal/* /prometheus/chunks_head/*"
+  
+  
+  # ==========================================
+  # 1. PRIMARY DATABASES & STORAGE ENGINES
+  # ==========================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: dev-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - postgres
+      - -c
+      - logging_collector=on
+      - -c
+      - log_destination=jsonlog
+      - -c
+      - log_directory=log
+      - -c
+      - log_filename=postgresql-%Y-%m-%d_%H%M%S.audit
+      - -c
+      - log_rotation_age=1d
+      - -c
+      - log_rotation_size=100MB
+      - -c
+      - log_statement=all
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DEV_USER}
+      POSTGRES_PASSWORD: ${DEV_PASS}
+      POSTGRES_DB: devdb
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./init-sonar-db.sql
+        target: /docker-entrypoint-initdb.d/init-sonar-db.sql
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    user: "0:0"
+    container_name: dev-sqlserver
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${DEV_PASS}"
+      MSSQL_PID: "Developer"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/sqlserver
+        target: /var/opt/mssql/data
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: dev-mongodb
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DEV_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DEV_PASS}
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/mongodb
+        target: /data/db
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  mariadb:
+    image: mariadb:11
+    container_name: dev-mariadb
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - mariadbd
+      - --general-log=ON
+      - --general-log-file=/var/lib/mysql/audit.log
+      - --log-output=FILE
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DEV_PASS}
+      MARIADB_DATABASE: devdb
+      MARIADB_USER: ${DEV_USER}
+      MARIADB_PASSWORD: ${DEV_PASS}
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  cosmos-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-latest
+    container_name: dev-cosmos
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      init-cosmos-permissions:
+        condition: service_completed_successfully
+    ports:
+      - "8081:8080"
+      - "10251-10255:10251-10255"
+      - "1234:1234"
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 2
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/cosmos
+        target: /data
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: dev-redis
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "6379:6379"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/redis
+        target: /data
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  redis-audit:
+    image: redis:7-alpine
+    container_name: dev-redis-audit
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command:
+      - sh
+      - -c
+      - |
+        umask 022
+        audit_file=/var/log/audit/redis/commands.log
+        while true; do
+          redis-cli -h redis MONITOR | while IFS= read -r entry; do
+            printf '%s\n' "$$entry" >> "$$audit_file"
+            if [ "$$(wc -c < "$$audit_file")" -ge 52428800 ]; then
+              mv "$$audit_file" "$$audit_file.$$(date +%s)"
+            fi
+          done
+          find /var/log/audit/redis -type f -name 'commands.log.*' -mtime +7 -delete
+          sleep 1
+        done
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/redis-audit
+        target: /var/log/audit/redis
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  audit-log-permissions:
+    image: redis:7-alpine
+    container_name: dev-audit-log-permissions
+    restart: unless-stopped
+    user: "999:999"
+    depends_on:
+      - postgres
+      - mariadb
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          chmod 711 /var/lib/postgresql/data 2>/dev/null || true
+          chmod 755 /var/lib/postgresql/data/log 2>/dev/null || true
+          chmod 644 /var/lib/postgresql/data/log/*.json 2>/dev/null || true
+          chmod 644 /var/lib/mysql/audit.log 2>/dev/null || true
+          sleep 2
+        done
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  # ==========================================
+  # 2. CODE ANALYSIS & QUALITY (SONARQUBE)
+  # ==========================================
+  sonarqube:
+    image: sonarqube:community
+    user: "1000:1000"
+    container_name: dev-sonarqube
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      init-sonar-permissions:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_USERNAME: ${DEV_USER}
+      SONAR_JDBC_PASSWORD: ${DEV_PASS}
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonar
+      SONAR_SEARCH_JAVAADDITIONALOPTS: "-Dnode.store.allow_mmap=true"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-data
+        target: /opt/sonarqube/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-extensions
+        target: /opt/sonarqube/extensions
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-logs
+        target: /opt/sonarqube/logs
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  # ==========================================
+  # 3. CLOUD EMULATORS (AWS, AZURE, GCP)
+  # ==========================================
+  localstack-aws:
+    image: localstack/localstack:3.8
+    container_name: dev-local-aws
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - DEBUG=1
+      - COMMUNITY_BUILD=1
+      - SERVICES=lambda,s3,sqs,sns,dynamodb,kinesis,apigateway
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/localstack
+        target: /var/lib/localstack
+        bind:
+          create_host_path: false
+      - type: bind
+        source: //var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+  
+  localgcp-official:
+    image: google/cloud-sdk:emulators
+    container_name: dev-local-gcp
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8095:8080"
+    command: gcloud beta emulators datastore start --host-port=0.0.0.0:8080 --project=dev-project
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/localgcp
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    container_name: dev-azurite
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/azurite
+        target: /data
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  gcp-pubsub:
+    image: google/cloud-sdk:emulators
+    container_name: dev-gcp-pubsub
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8085:8080"
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=dev-project
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/gcp-pubsub
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  gcp-firestore:
+    image: google/cloud-sdk:emulators
+    container_name: dev-gcp-firestore
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8090:8090"
+    command: gcloud beta emulators firestore start --host-port=0.0.0.0:8090
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/gcp-firestore
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  # ==========================================
+  # 4. KAFKA CLUSTER & RABBITMQ CLUSTER
+  # ==========================================
+  kafka-1:
+    image: apache/kafka:latest
+    user: "0:0"
+    container_name: dev-kafka-1
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-1:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-1:29093,2@kafka-2:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kafka-1
+        target: /tmp/kraft-combined-logs
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  kafka-2:
+    image: apache/kafka:latest
+    user: "0:0"
+    container_name: dev-kafka-2
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-2:29092,PLAINTEXT_HOST://localhost:9093'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-1:29093,2@kafka-2:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kafka-2
+        target: /tmp/kraft-combined-logs
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  rabbitmq-1:
+    image: rabbitmq:3-management-alpine
+    container_name: dev-rabbitmq-1
+    hostname: rabbitmq-1
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "DevClusterCookieSecret123!"
+      RABBITMQ_DEFAULT_USER: ${DEV_USER}
+      RABBITMQ_DEFAULT_PASS: ${DEV_PASS}
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-1
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
+    entrypoint: >
+      /bin/sh -c "
+      chmod 400 /var/lib/rabbitmq/.erlang.cookie 2>/dev/null || true;
+      exec docker-entrypoint.sh rabbitmq-server
+      "
+    networks:
+      - dev-network
+
+  rabbitmq-2:
+    image: rabbitmq:3-management-alpine
+    container_name: dev-rabbitmq-2
+    hostname: rabbitmq-2
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5673:5672"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "DevClusterCookieSecret123!"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-2
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
+    entrypoint: >
+      /bin/sh -c "
+      chmod 400 /var/lib/rabbitmq/.erlang.cookie 2>/dev/null || true;
+      exec docker-entrypoint.sh rabbitmq-server
+      "
+    networks:
+      - dev-network
+
+  rabbitmq-3:
+    image: rabbitmq:3-management-alpine
+    container_name: dev-rabbitmq-3
+    hostname: rabbitmq-3
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5674:5672"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "DevClusterCookieSecret123!"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-3
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
+    entrypoint: >
+      /bin/sh -c "
+      chmod 400 /var/lib/rabbitmq/.erlang.cookie 2>/dev/null || true;
+      exec docker-entrypoint.sh rabbitmq-server
+      "
+    networks:
+      - dev-network
+
+  # ==========================================
+  # 5. OPENTELEMETRY & OBSERVABILITY
+  # ==========================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    user: "0:0"
+    container_name: dev-otel-collector
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - type: bind
+        source: ./otel-config.yaml
+        target: /etc/otel-collector-config.yaml
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/redis-audit
+        target: /var/log/audit/redis
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "24224:24224"
+      - "8889:8889"
+    depends_on:
+      - jaeger
+      - loki
+    networks:
+      - dev-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: dev-jaeger
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "16686:16686"
+    networks:
+      - dev-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dev-prometheus
+    stop_grace_period: 2m
+    restart: unless-stopped
+    logging: *default-logging
+    user: "0:0"
+    depends_on:
+      init-prom-wal:
+        condition: service_completed_successfully
+    ports:
+      - "9091:9090"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/prometheus
+        target: /prometheus
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        bind:
+          create_host_path: false
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - dev-network
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: dev-cadvisor
+    restart: unless-stopped
+    logging: *default-logging
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --store_container_labels=true
+    volumes:
+      - type: bind
+        source: /
+        target: /rootfs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/run
+        target: /var/run
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/lib/docker
+        target: /var/lib/docker
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /dev/disk
+        target: /dev/disk
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: dev-docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      INFO: "1"
+      POST: "0"
+      LOG_LEVEL: info
+    volumes:
+      - type: bind
+        source: //var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  container-status-exporter:
+    image: telegraf:1.40.2
+    container_name: dev-container-status-exporter
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - docker-socket-proxy
+    volumes:
+      - type: bind
+        source: ./telegraf-docker-status.conf
+        target: /etc/telegraf/telegraf.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  grafana:
+    image: grafana/grafana:latest
+    user: "0:0"
+    container_name: dev-grafana
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${DEV_PASS}
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/grafana
+        target: /var/lib/grafana
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/provisioning/datasources
+        target: /etc/grafana/provisioning/datasources
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/provisioning/dashboards
+        target: /etc/grafana/provisioning/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  loki:
+    image: grafana/loki:3.5.0
+    stop_grace_period: 2m
+    user: "0:0"
+    container_name: dev-loki
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["-config.file=/etc/loki/config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - type: bind
+        source: ./loki-config.yaml
+        target: /etc/loki/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/loki
+        target: /loki
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  # ==========================================
+  # 6. MANAGEMENT GUIs & DASHBOARDS
+  # ==========================================
+  adminer:
+    image: adminer:latest
+    container_name: dev-adminer
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8088:8080"
+    networks:
+      - dev-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    user: "0:0"
+    container_name: dev-pgadmin
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${DEV_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${DEV_PASS}
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/pgadmin
+        target: /var/lib/pgadmin
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: dev-redis-insight
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5540:5540"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/redis-insight
+        target: /data
+        bind:
+          create_host_path: false
+    networks:
+      - dev-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: dev-kafka-ui
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8082:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: dev-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:29092,kafka-2:29092
+    networks:
+      - dev-network
+
+  # ==========================================
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: dev-mailpit
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI Dashboard
+    networks:
+      - dev-network
+
+  # ==========================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    user: "0:0"
+    container_name: dev-keycloak
+    restart: unless-stopped
+    logging: *default-logging
+    command: start-dev
+    ports:
+      - "8089:8080" # Host port mapped to 8081 if  uses 8081 via HTTPS
+    environment:
+      KEYCLOAK_ADMIN: ${DEV_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${DEV_PASS}
+    networks:
+      - dev-network

@@ -39,3 +39,4 @@ loki/
 localgcp/*
 gcp-pubsub/*
 gcp-firestore/*
+timescaledb/*
