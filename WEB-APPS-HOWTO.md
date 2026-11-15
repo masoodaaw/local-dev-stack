@@ -60,11 +60,17 @@ Keep `.env` and backups private (`chmod 600 .env`). Compose renders the dynv6
 token into a config stored on the Docker host; Docker administrators can read
 it, and `docker compose config` prints it.
 
-Create these directories under `DATA_DIR` before starting: `nginx/logs`,
-`certbot/conf`, `certbot/www`, `site1-data`, and `site2-data`. The certificate
+Create these directories under `DATA_DIR` before starting: `ddclient`,
+`nginx/logs`, `certbot/conf`, `certbot/www`, `site1-data`, and `site2-data`. The certificate
 manager must be able to write to both `certbot` directories. The bind mounts
 use `create_host_path: false`; Compose fails if sources are absent. Ensure
 `default-site/`, `nginx/templates/`, and `nginx/ssl-params.conf` exist.
+
+The updater bind-mounts `${DATA_DIR}/ddclient` at `/config`, replacing the
+image's anonymous volume. Its active configuration still comes from Compose
+at `/run/ddclient.conf`, and its cache remains ephemeral at
+`/tmp/ddclient.cache`; existing files in the host directory are not used by
+the current command. Protect or remove any obsolete files containing secrets.
 
 Create the shared network if it does not exist:
 

@@ -113,8 +113,11 @@ configured by this service. Keep `.env` private; users with Docker access can
 also read the generated configuration. Compose stores its generated config on
 the Docker host. Some Compose versions warn that config ownership and mode
 are unsupported outside Swarm; verify the generated file is accessible only
-to the container user on your installation. Existing files in `${DATA_DIR}/ddclient` are not used or
-overwritten; remove obsolete files containing credentials when no longer needed.
+to the container user on your installation. Create `${DATA_DIR}/ddclient` before
+starting the updater: it is bind-mounted at `/config` and is not created by
+Compose. The active configuration comes from Compose, while the cache remains
+ephemeral under `/tmp`; existing files in the host directory are not used by
+the current command. Remove obsolete files containing credentials when no longer needed.
 
 With the defaults, the updater checks the public IPv4 address every 300 seconds and updates
 dynv6 when it changes. Dynv6's DynDNS API is IPv4-only; it does not update

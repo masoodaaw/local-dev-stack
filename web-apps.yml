@@ -37,6 +37,12 @@ services:
     user: "1000:1000"
     entrypoint: ["/usr/bin/ddclient"]
     command: ["--foreground", "--file", "/run/ddclient.conf", "--cache", "/tmp/ddclient.cache"]
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/ddclient
+        target: /config
+        bind:
+          create_host_path: false
     configs:
       - source: ddclient-config
         target: /run/ddclient.conf

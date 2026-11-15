@@ -59,7 +59,7 @@
   <rect x="720" y="340" width="240" height="105" rx="8" class="box"/>
   <text x="840" y="372" text-anchor="middle" class="heading">ddns-updater</text>
   <text x="840" y="399" text-anchor="middle" class="small">ddclient · every 300s</text>
-  <text x="840" y="422" text-anchor="middle" class="small">Discovers public IPv4</text>
+  <text x="840" y="422" text-anchor="middle" class="small">Host /config bind · IPv4 lookup</text>
   <path d="M860 340 V270 H912 V225" class="line"/>
   <rect x="1030" y="340" width="270" height="105" rx="8" class="box"/>
   <text x="1165" y="372" text-anchor="middle" class="heading">certbot (acme.sh)</text>
