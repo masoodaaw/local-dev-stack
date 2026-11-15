@@ -78,6 +78,121 @@ To stop the stack without deleting persisted data:
 docker compose -f local-containers.yml down
 ```
 
+### Linux stack: host directories for image volumes
+
+`linux-containers.yml` bind-mounts the following image-declared paths under
+`DATA_DIR`. Create each directory before starting or recreating the affected
+service; `create_host_path: false` prevents Compose from creating them.
+
+| Service | Host directory under `DATA_DIR` | Container path |
+|---|---|---|
+| `mongodb` | `mongodb-configdb` | `/data/configdb` |
+| `redis-audit` | `redis-audit-data` | `/data` |
+| `audit-log-permissions` | `audit-log-permissions-data` | `/data` |
+| `kafka-1` | `kafka-1-secrets`, `kafka-1-config`, `kafka-1-data` | `/etc/kafka/secrets`, `/mnt/shared/config`, `/var/lib/kafka/data` |
+| `kafka-2` | `kafka-2-secrets`, `kafka-2-config`, `kafka-2-data` | `/etc/kafka/secrets`, `/mnt/shared/config`, `/var/lib/kafka/data` |
+| `jaeger` | `jaeger-tmp` | `/tmp` |
+| `sonarqube` | `sonarqube-temp` | `/opt/sonarqube/temp` |
+
+On Linux, set `DATA_DIR` in the shell to the same absolute path used in
+`.env`, then create the directories:
+
+```bash
+export DATA_DIR=/absolute/path/to/data
+mkdir -p "$DATA_DIR"/mongodb-configdb "$DATA_DIR"/redis-audit-data \
+  "$DATA_DIR"/audit-log-permissions-data "$DATA_DIR"/kafka-1-secrets \
+  "$DATA_DIR"/kafka-1-config "$DATA_DIR"/kafka-1-data \
+  "$DATA_DIR"/kafka-2-secrets "$DATA_DIR"/kafka-2-config \
+  "$DATA_DIR"/kafka-2-data "$DATA_DIR"/jaeger-tmp "$DATA_DIR"/sonarqube-temp
+chmod 700 "$DATA_DIR"/kafka-1-secrets "$DATA_DIR"/kafka-2-secrets
+chmod 1777 "$DATA_DIR"/jaeger-tmp
+chmod 770 "$DATA_DIR"/sonarqube-temp
+```
+
+The configured Kafka containers run as root. The MongoDB entrypoint runs as
+root and adjusts ownership of `mongodb-configdb`; Jaeger runs as UID `10001`
+and needs a writable temporary directory. Ensure parent directories are
+traversable by the relevant container users. The SonarQube permission initializer
+sets ownership of `sonarqube-temp` to UID and GID `1000`. The audit helpers do not
+currently use their `/data` directories. Kafka's active log directories remain
+in `kafka-1` and `kafka-2`, and MongoDB's main database remains in `mongodb`;
+do not replace or delete those directories.
+
+**Existing deployments:** a bind mount hides the previous anonymous volume;
+Compose does not copy its contents into the host directory. Plan for downtime
+and stop the affected services:
+
+```bash
+docker compose -f linux-containers.yml stop mongodb redis-audit \
+  audit-log-permissions kafka-1 kafka-2 jaeger sonarqube
+```
+
+Back up any data, inspect every old volume, and copy any contents that must be
+retained into its matching empty host directory with ownership and permissions
+preserved. For example, after
+stopping `dev-mongodb`, copy its config data with
+`docker cp -a dev-mongodb:/data/configdb/. "$DATA_DIR/mongodb-configdb/"`.
+Repeat for each mount in the table if it contains data; do not overwrite
+existing files. Containers must still exist for `docker cp`; do not remove them
+first. Verify the copied data and permissions, including mode `1777` on
+`jaeger-tmp`. Run SonarQube's initializer (which recursively changes ownership
+of its four mounted directories), then recreate only the affected services:
+
+```bash
+docker compose -f linux-containers.yml run --rm --no-deps init-sonar-permissions
+docker compose -f linux-containers.yml up -d --no-deps mongodb redis-audit \
+  audit-log-permissions kafka-1 kafka-2 jaeger sonarqube
+docker inspect dev-mongodb dev-redis-audit dev-audit-log-permissions \
+  dev-kafka-1 dev-kafka-2 dev-jaeger dev-sonarqube --format '{{.Name}} {{json .Mounts}}'
+```
+
+Keep the old Docker volumes until the migrated services have been checked and
+backed up. Jaeger's `/tmp` is temporary; do not assume traces are persisted
+there.
+
+### Portainer host bind migration
+
+The Linux Compose file has an optional `portainer` profile. It uses
+`${DATA_DIR}/portainer` for `/data` and the existing Docker socket bind.
+Access to that socket gives Portainer administrative control of Docker.
+The profile keeps ordinary stack startup from conflicting with an existing
+standalone Portainer container.
+
+For an existing standalone container named `portainer` using the named volume
+`portainer_data`, schedule downtime and back up the volume first. Set
+`DATA_DIR` in the shell to the same absolute path used in `.env`. Create a
+private directory with the first two commands below, or if it already exists,
+verify it is empty and private before skipping `mkdir`. Then stop Portainer
+and copy the volume using a read-only source mount:
+
+```bash
+export DATA_DIR=/absolute/path/to/data
+mkdir -m 700 "$DATA_DIR/portainer"
+docker stop portainer
+docker run --rm --network none \
+  --mount type=volume,source=portainer_data,target=/source,readonly \
+  --mount type=bind,source="$DATA_DIR/portainer",target=/target \
+  --entrypoint sh alpine:latest -c 'cp -a /source/. /target/ && chmod 700 /target'
+```
+
+Verify the copy and backup before proceeding. The original container must be
+renamed because Compose cannot create another container with the same name.
+Disable its automatic restart so it cannot conflict after a Docker restart:
+
+```bash
+docker update --restart=no portainer
+docker rename portainer portainer-before-bind
+docker compose -f linux-containers.yml --profile portainer up -d --no-deps portainer
+docker inspect portainer --format '{{json .Mounts}}'
+```
+
+Confirm Portainer works and retains its configuration before removing the old
+container or volume. To roll back, stop and rename the new container, rename
+`portainer-before-bind` back to `portainer`, restore its `always` restart
+policy, and start it. The original `portainer_data` volume remains untouched.
+For a fresh deployment, create the private host directory before starting the
+profile; no volume copy or rename is needed.
+
 ### dynv6 dynamic DNS (web-apps stack)
 
 For the complete setup and troubleshooting guide, see
