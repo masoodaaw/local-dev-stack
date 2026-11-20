@@ -801,6 +801,27 @@ services:
   # ==========================================
   # 6. MANAGEMENT GUIs & DASHBOARDS
   # ==========================================
+  dashboard:
+    image: nginx:stable-alpine
+    container_name: dev-dashboard
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/admin_ui/html
+        target: /usr/share/admin_ui/html
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dev-network
+
   adminer:
     image: adminer:latest
     container_name: dev-adminer
