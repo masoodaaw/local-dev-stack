@@ -891,8 +891,8 @@ services:
       - "${DASHBOARD_PORT:-8080}:80"
     volumes:
       - type: bind
-        source: ${DATA_DIR}/admin_ui/html
-        target: /usr/share/admin_ui/html
+        source: ./admin_ui/html
+        target: /usr/share/nginx/html
         read_only: true
         bind:
           create_host_path: false
