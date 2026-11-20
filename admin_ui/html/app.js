@@ -55,7 +55,8 @@ const groups = [
 const hostname = location.hostname || "localhost";
 const directory = document.querySelector("#directory");
 const search = document.querySelector("#search");
-const category = document.querySelector("#category");
+const categories = document.querySelector("#categories");
+let selectedCategory = "";
 const services = groups.flatMap(group => group.services);
 document.querySelector("#hostname").textContent = hostname;
 document.querySelector("#service-count").textContent = services.length;
@@ -97,10 +98,27 @@ async function copyEndpoint(endpoint, button) {
   }
 }
 
-for (const group of groups) {
-  const option = element("option", "", group.name);
-  option.value = group.name;
-  category.append(option);
+for (const name of ["All categories", ...groups.map(group => group.name)]) {
+  const item = element("li", "nav-item");
+  const link = element("a", "nav-link", name);
+  link.href = "#directory";
+  if (name === "All categories") {
+    link.classList.add("active");
+    link.setAttribute("aria-current", "page");
+  }
+  link.addEventListener("click", event => {
+    event.preventDefault();
+    selectedCategory = name === "All categories" ? "" : name;
+    for (const tab of categories.querySelectorAll(".nav-link")) {
+      const active = tab === link;
+      tab.classList.toggle("active", active);
+      if (active) tab.setAttribute("aria-current", "page");
+      else tab.removeAttribute("aria-current");
+    }
+    render();
+  });
+  item.append(link);
+  categories.append(item);
 }
 
 function render() {
@@ -108,7 +126,7 @@ function render() {
   const query = search.value.trim().toLowerCase();
   let visibleCount = 0;
   for (const group of groups) {
-    if (category.value && category.value !== group.name) continue;
+    if (selectedCategory && selectedCategory !== group.name) continue;
     const matches = group.services.filter(service => `${service.id} ${service.container} ${service.name} ${service.note} ${(service.ports || []).join(" ")} ${group.name}`.toLowerCase().includes(query));
     if (!matches.length) continue;
     visibleCount += matches.length;
@@ -161,5 +179,4 @@ function render() {
 }
 
 search.addEventListener("input", render);
-category.addEventListener("change", render);
 render();

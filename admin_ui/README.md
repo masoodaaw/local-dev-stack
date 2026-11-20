@@ -10,7 +10,7 @@ Open http://localhost:8080. The existing external `dev-network` network must
 exist, as required by the rest of the Compose stack. To use another port, set
 `DASHBOARD_PORT` in your environment or Compose `.env` file before starting it.
 
-The `./nginx/html` host directory is bind-mounted read-only at
+The `./admin_ui/html` host directory is bind-mounted read-only at
 `/usr/share/nginx/html`. The dashboard declares no named or anonymous volumes,
 does not mount the Docker socket, and needs no image rebuild for site changes.
 Reload the browser after editing the files.

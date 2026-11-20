@@ -30,12 +30,12 @@
       <div class="totals"><strong id="service-count">0</strong> services <span aria-hidden="true">/</span> <strong id="web-count">0</strong> web destinations</div>
     </div>
     <div class="directory-toolbar row g-3 align-items-end mb-4">
-      <div class="col-md-8 col-lg-9">
+      <div class="col-12">
         <label for="search" class="form-label">Find a service</label>
         <div class="input-group"><span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span><input id="search" type="search" class="form-control" placeholder="Name, container or port" autocomplete="off"></div>
       </div>
-      <div class="col-md-4 col-lg-3"><label for="category" class="form-label">Category</label><select id="category" class="form-select"><option value="">All categories</option></select></div>
     </div>
+    <nav aria-label="Service categories"><ul id="categories" class="nav nav-tabs mb-4"></ul></nav>
     <output id="results" class="d-block small text-secondary mb-3" aria-live="polite"></output>
     <div id="directory"></div>
     <p id="empty" class="empty-state" hidden>No services match your search.</p>
