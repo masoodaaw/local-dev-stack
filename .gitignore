@@ -41,3 +41,6 @@ localgcp/*
 gcp-pubsub/*
 gcp-firestore/*
 timescaledb/*
+timescaledb2/*
+# Kubernetes lab host-persisted data
+kubernetes/data/

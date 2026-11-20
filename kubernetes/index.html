@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kubernetes Landscape Control Room</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/browser.js" defer></script>
+</head>
+<body>
+  <header><div class="wrap masthead"><div><div class="eyebrow">K3S LAB · SEPARATE NETWORK</div><h1>Kubernetes landscape</h1></div><div class="connection"><span class="dot" id="connection-dot"></span><span id="connection">Connecting</span></div></div></header>
+  <main class="wrap">
+    <div class="intro"><div><h2>Cluster control room</h2><p>Live workloads, autoscaling and disaster recovery</p></div><span id="updated">Waiting for first update</span></div>
+    <div id="alert" class="alert" role="status" hidden></div>
+    <section class="flow" aria-label="Request path"><span>Browser</span><b>→</b><span>Traefik ingress</span><b>→</b><span>Gateway</span><b>→</b><span>Load balancer</span><b>→</b><span>CDN</span><b>→</b><span>UI</span><b>→</b><span>API</span><b>→</b><span>Database</span></section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">EDGE PIPELINE</div><h2>Component usage</h2></div></div>
+      <p class="muted">Round-robin balancing across CDN pods, cache hit ratio, and per-component request rate.</p>
+      <div class="table-wrap"><table><thead><tr><th>Component</th><th>Ready / desired</th><th>Requests/sec</th><th>In flight</th><th>Detail</th></tr></thead><tbody id="components"></tbody></table></div>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">AUTOSCALING</div><h2>Traffic &amp; pod scaling</h2></div><div class="actions"><button id="traffic-off" class="secondary">Off</button><button id="traffic-low">Low load</button><button id="traffic-high">High load</button></div></div>
+      <p class="muted" id="traffic-state">Reading traffic state...</p>
+      <div class="table-wrap"><table><thead><tr><th>Workload</th><th>Ready / desired</th><th>CPU target</th><th>Current CPU</th><th>HPA range</th></tr></thead><tbody id="workloads"></tbody></table></div>
+      <p class="note">The traffic generator drives the full chain. HPAs need metrics-server samples, so scale-up and scale-down take tens of seconds. Scale-down is intentionally slow (stabilisation window).</p>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">PRIMARY / REPLICA + BACKUPS</div><h2>Database &amp; disaster recovery</h2></div><div class="actions"><button id="increment">Add to counter</button><button id="backup" class="secondary">Back up now</button></div></div>
+      <div class="database">
+        <div><div class="metric-label">SAVED COUNTER</div><div class="counter" id="counter">—</div></div>
+        <div><div class="metric-label">DB QUERIES</div><div class="counter small" id="touches">—</div></div>
+        <div><div class="metric-label">PRIMARY POD</div><div class="primary-pod" id="database-primary">—</div></div>
+      </div>
+      <p id="database-status">Checking database...</p>
+      <div class="actions danger-actions"><button id="failover" class="danger">Simulate primary failure</button><button id="disaster" class="danger">Simulate total DB loss</button><button id="recover" class="secondary">Recover from backup</button><button id="restore" class="secondary">Restore latest backup</button></div>
+      <p class="note">Replica pulls from the primary every few seconds, so a promotion loses at most a couple of seconds of writes. Backups are written to a host-mounted volume. Recovery rolls the counter back to the latest snapshot (RPO), and a full StatefulSet restart is the RTO exercise.</p>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">SCHEDULER VIEW</div><h2>Pods</h2></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Phase</th><th>Ready</th><th>Restarts</th><th>CPU</th></tr></thead><tbody id="pods"></tbody></table></div>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">CONTROL PLANE</div><h2>Recent events</h2></div></div>
+      <ul id="events" class="events"></ul>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><div><div class="eyebrow">CKA PREPARATION</div><h2>Practice commands</h2></div></div>
+      <p class="muted">Run these on the Linux host. They use the lab's own kubeconfig inside the K3s container.</p>
+      <pre class="commands">docker compose -f kubernetes.yml exec k3s kubectl get all -n landscape-lab
+docker compose -f kubernetes.yml exec k3s kubectl get hpa -n landscape-lab -w
+docker compose -f kubernetes.yml exec k3s kubectl describe statefulset database -n landscape-lab
+docker compose -f kubernetes.yml exec k3s kubectl get pvc,pv -n landscape-lab
+docker compose -f kubernetes.yml exec k3s kubectl rollout status deployment/api -n landscape-lab
+docker compose -f kubernetes.yml exec k3s kubectl scale deployment/traffic -n landscape-lab --replicas=2
+docker compose -f kubernetes.yml exec k3s kubectl delete pod database-0 -n landscape-lab</pre>
+      <p class="note">Open <a href="/architecture.svg">the architecture diagram</a> and read <code>kubernetes/CKA-STUDY-GUIDE.md</code> in the repository for exercises mapped to the CKA domains.</p>
+    </section>
+  </main>
+  <footer class="wrap">K3s · Traefik · Deployment + HPA · StatefulSet + PVC · NetworkPolicy · shared PVC backups</footer>
+</body>
+</html>

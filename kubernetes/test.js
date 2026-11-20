@@ -1,0 +1,126 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { Readable } = require('node:stream');
+const { isSameOriginMutation, isLabPod } = require('./security');
+const { createDatabaseHandler, apiHandler } = require('./app');
+const { build } = require('./build');
+
+function response() {
+  return { writeHead(status) { this.status = status; }, end(body) { try { this.body = JSON.parse(body); } catch { this.body = body; } } };
+}
+
+function mutation(origin, host, contentType = 'application/json') {
+  return { headers: { origin, host, 'content-type': contentType } };
+}
+
+function invoke(url, body, clients) {
+  const request = Readable.from([JSON.stringify(body)]);
+  Object.assign(request, { method: 'POST', url, headers: { host: 'localhost:18080', origin: 'http://localhost:18080', 'content-type': 'application/json' } });
+  const result = response();
+  return apiHandler(request, result, clients).then(() => result);
+}
+
+test('mutations require a matching loopback origin and JSON', () => {
+  assert.equal(isSameOriginMutation(mutation('http://localhost:18080', 'localhost:18080')), true);
+  assert.equal(isSameOriginMutation(mutation('http://127.0.0.1:18080', '127.0.0.1:18080')), true);
+  assert.equal(isSameOriginMutation(mutation('http://[::1]:18080', '[::1]:18080')), true);
+  assert.equal(isSameOriginMutation(mutation('http://evil.example', 'localhost:18080')), false);
+  assert.equal(isSameOriginMutation(mutation('http://localhost:18080', 'localhost:18080', 'text/plain')), false);
+  assert.equal(isLabPod('database-0'), true);
+  assert.equal(isLabPod('loadbalancer-abc'), true);
+  assert.equal(isLabPod('unrelated-0'), false);
+});
+
+test('control routes reject cross-origin requests and unknown operations', async () => {
+  const forbidden = response();
+  await apiHandler({ method: 'POST', url: '/api/database/failover', headers: { host: 'localhost:18080', origin: 'http://evil.test', 'content-type': 'application/json' } }, forbidden);
+  assert.equal(forbidden.status, 403);
+  const unknown = response();
+  await apiHandler({ method: 'POST', url: '/api/deployments/other', headers: {} }, unknown);
+  assert.equal(unknown.status, 404);
+});
+
+test('traffic levels validate and patch only the traffic scale', async () => {
+  const calls = [];
+  const clients = {
+    kube: async (...arguments_) => { calls.push(arguments_); return {}; },
+    internal: async (...arguments_) => { calls.push(arguments_); return { status: 200, data: '{"counter":3,"touches":9,"role":"primary","primary":true}' }; }
+  };
+  assert.equal((await invoke('/api/traffic', { level: 2 }, clients)).status, 200);
+  assert.equal((await invoke('/api/traffic', { level: 9 }, clients)).status, 400);
+  assert.equal((await invoke('/api/traffic', { level: '1' }, clients)).status, 400);
+  assert.deepEqual(calls[0], ['/apis/apps/v1/namespaces/landscape-lab/deployments/traffic/scale', 'PATCH', { spec: { replicas: 2 } }]);
+  assert.equal(calls.length, 1);
+  const scaled = await invoke('/api/database/scale', { replicas: 0 }, clients);
+  assert.equal(scaled.status, 200);
+  assert.deepEqual(calls[1], ['/apis/apps/v1/namespaces/landscape-lab/statefulsets/database/scale', 'PATCH', { spec: { replicas: 0 } }]);
+  assert.equal((await invoke('/api/database/scale', { replicas: 1 }, clients)).status, 400);
+});
+
+test('database primary/replica lifecycle, backup and restore', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'landscape-'));
+  const shared = path.join(base, 'shared');
+  const call = (handler, method, url) => {
+    const result = response();
+    handler({ method, url }, result);
+    return result;
+  };
+  try {
+    const primary = createDatabaseHandler(path.join(base, 'database-0'), { sharedDirectory: shared, podName: 'database-0' });
+    const replica = createDatabaseHandler(path.join(base, 'database-1'), { sharedDirectory: shared, podName: 'database-1' });
+    assert.equal(call(replica, 'POST', '/increment').status, 409);
+    assert.equal(call(primary, 'POST', '/increment').body.counter, 1);
+    assert.equal(call(primary, 'POST', '/backup').status, 200);
+    assert.ok(fs.existsSync(path.join(shared, 'backups', 'latest.json')));
+    assert.equal(call(primary, 'POST', '/increment').body.counter, 2);
+    assert.equal(call(primary, 'POST', '/restore').body.counter, 1);
+    replica.adopt({ counter: 7, touches: 4 });
+    assert.equal(call(replica, 'GET', '/state').body.counter, 7);
+    primary.adopt({ counter: 99, touches: 0 });
+    assert.equal(call(primary, 'GET', '/state').body.counter, 1);
+    const promoted = call(replica, 'POST', '/promote');
+    assert.equal(promoted.status, 200);
+    assert.equal(promoted.body.role, 'primary');
+    assert.equal(call(primary, 'POST', '/increment').status, 409);
+    assert.equal(call(replica, 'POST', '/increment').body.counter, 8);
+    const reopened = createDatabaseHandler(path.join(base, 'database-1'), { sharedDirectory: shared, podName: 'database-1' });
+    assert.equal(call(reopened, 'GET', '/state').body.counter, 8);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('generated manifest embeds exact assets and the full landscape', () => {
+  const manifest = fs.readFileSync(path.join(__dirname, 'landscape.yaml'), 'utf8');
+  assert.equal(manifest, build(), 'Run node kubernetes/build.js after changing a source file');
+  const expected = [
+    ...['app.js', 'security.js', 'index.html', 'app.css', 'browser.js'].map(file => [file, path.join(__dirname, file)]),
+    ['architecture.svg', path.join(__dirname, '..', 'kubernetes-architecture.svg')]
+  ];
+  for (const [file, source] of expected) {
+    const line = manifest.split('\n').find(entry => entry.startsWith(`  ${file}: `));
+    assert.ok(line, `Missing ConfigMap asset ${file}`);
+    assert.equal(JSON.parse(line.slice(line.indexOf(': ') + 2)), fs.readFileSync(source, 'utf8'));
+  }
+  assert.equal((manifest.match(/^kind: Deployment$/gm) || []).length, 6);
+  assert.equal((manifest.match(/^kind: StatefulSet$/gm) || []).length, 1);
+  assert.equal((manifest.match(/^kind: HorizontalPodAutoscaler$/gm) || []).length, 5);
+  assert.equal((manifest.match(/^kind: NetworkPolicy$/gm) || []).length, 7);
+  assert.equal((manifest.match(/^kind: Service$/gm) || []).length, 7);
+  assert.equal((manifest.match(/^kind: Ingress$/gm) || []).length, 1);
+  assert.match(manifest, /kind: Ingress[\s\S]*?name: gateway[\s\S]*?number: 8080/);
+  assert.match(manifest, /resourceNames: \["database-0"\]\s+verbs: \["delete"\]/);
+  assert.match(manifest, /resources: \["statefulsets\/scale"\]\s+resourceNames: \["database"\]\s+verbs: \["patch"\]/);
+  assert.match(manifest, /kind: StatefulSet[\s\S]*?replicas: 2[\s\S]*?storageClassName: local-path/);
+  assert.match(manifest, /kind: PersistentVolumeClaim[\s\S]*?name: landscape-shared[\s\S]*?storageClassName: local-path/);
+  assert.match(manifest, /claimName: landscape-shared/);
+  assert.doesNotMatch(manifest, /hostPath/);
+  assert.match(manifest, /name: cdn-headless[\s\S]*?clusterIP: None/);
+  assert.doesNotMatch(manifest, /kind: ClusterRole(?:Binding)?\b/);
+  assert.doesNotMatch(manifest, /hostNetwork: true/);
+});

@@ -1,0 +1,577 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: landscape-lab
+  labels:
+    app.kubernetes.io/part-of: landscape-lab
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames: ["database-0"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    resourceNames: ["traffic"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    resourceNames: ["database"]
+    verbs: ["patch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+subjects:
+  - kind: ServiceAccount
+    name: landscape-controller
+    namespace: landscape-lab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: landscape-controller
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: landscape-lab
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: gateway}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+        - podSelector:
+            matchLabels: {app: traffic}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loadbalancer-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: loadbalancer}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: gateway}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cdn-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: cdn}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: loadbalancer}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: ui}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: cdn}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: ui}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: database}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: database}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: landscape-lab
+spec:
+  selector: {app: gateway}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+spec:
+  selector: {app: loadbalancer}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn
+  namespace: landscape-lab
+spec:
+  selector: {app: cdn}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: cdn}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+  namespace: landscape-lab
+spec:
+  selector: {app: ui}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: landscape-lab
+spec:
+  selector: {app: api}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: database}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: landscape-shared
+  namespace: landscape-lab
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: landscape
+  namespace: landscape-lab
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: {number: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: gateway}
+  template:
+    metadata:
+      labels: {app: gateway, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: gateway
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: gateway}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: loadbalancer}
+  template:
+    metadata:
+      labels: {app: loadbalancer, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: loadbalancer
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: loadbalancer}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: cdn}
+  template:
+    metadata:
+      labels: {app: cdn, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: cdn
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: cdn}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ui}
+  template:
+    metadata:
+      labels: {app: ui, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: ui
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: ui}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      serviceAccountName: landscape-controller
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: api
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env:
+            - {name: ROLE, value: api}
+            - {name: SHARED_DIR, value: /shared}
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: shared, mountPath: /shared, readOnly: true}
+      volumes:
+        - {name: app, configMap: {name: landscape-app}}
+        - name: shared
+          persistentVolumeClaim:
+            claimName: landscape-shared
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 0
+  selector:
+    matchLabels: {app: traffic}
+  template:
+    metadata:
+      labels: {app: traffic, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: traffic
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: traffic}]
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 96Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  serviceName: database
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: database}
+  template:
+    metadata:
+      labels: {app: database, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: database
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env:
+            - {name: ROLE, value: database}
+            - {name: DATA_DIR, value: /data}
+            - {name: SHARED_DIR, value: /shared}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 96Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: data, mountPath: /data}
+            - {name: shared, mountPath: /shared}
+      volumes:
+        - {name: app, configMap: {name: landscape-app}}
+        - name: shared
+          persistentVolumeClaim:
+            claimName: landscape-shared
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources: {requests: {storage: 256Mi}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: gateway}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: loadbalancer}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cdn
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: cdn}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ui
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: ui}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: api}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: landscape-app
+  namespace: landscape-lab
+data:
+  app.js: "'use strict';\n\nconst http = require('node:http');\nconst https = require('node:https');\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst dns = require('node:dns');\nconst crypto = require('node:crypto');\nconst { isSameOriginMutation, isLabPod } = require('./security');\n\nconst role = process.env.ROLE || 'ui';\nconst port = Number(process.env.PORT || 8080);\nconst namespace = 'landscape-lab';\nconst label = encodeURIComponent('app.kubernetes.io/part-of=landscape-lab');\nconst serviceAccount = '/var/run/secrets/kubernetes.io/serviceaccount';\nconst podName = process.env.HOSTNAME || 'local';\nconst sharedDirectory = process.env.SHARED_DIR || '/shared';\nconst dataDirectory = process.env.DATA_DIR || '/data';\nconst componentTimeout = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);\nconst hopByHop = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);\n\nlet workCalls = 0;\n\nfunction send(response, status, value, type = 'application/json; charset=utf-8', headers = {}) {\n  response.writeHead(status, {\n    'content-type': type,\n    'cache-control': 'no-store',\n    'x-content-type-options': 'nosniff',\n    'x-served-by': `${role}/${podName}`,\n    ...headers\n  });\n  response.end(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value));\n}\n\nfunction request(options, body) {\n  return new Promise((resolve, reject) => {\n    const transport = options.protocol === 'https:' ? https : http;\n    const outgoing = transport.request({ timeout: componentTimeout, ...options }, incoming => {\n      const chunks = [];\n      let size = 0;\n      incoming.on('data', chunk => {\n        size += chunk.length;\n        if (size > 4000000) outgoing.destroy(new Error('Response too large'));\n        else chunks.push(chunk);\n      });\n      incoming.on('end', () => resolve({ status: incoming.statusCode, data: Buffer.concat(chunks).toString('utf8'), headers: incoming.headers }));\n    });\n    outgoing.on('timeout', () => outgoing.destroy(new Error('Request timed out')));\n    outgoing.on('error', reject);\n    if (body !== undefined) outgoing.write(body);\n    outgoing.end();\n  });\n}\n\nasync function kube(target, method = 'GET', body) {\n  const token = fs.readFileSync(`${serviceAccount}/token`, 'utf8');\n  const ca = fs.readFileSync(`${serviceAccount}/ca.crt`);\n  const result = await request({\n    protocol: 'https:',\n    hostname: process.env.KUBERNETES_SERVICE_HOST,\n    port: process.env.KUBERNETES_SERVICE_PORT || 443,\n    path: target,\n    method,\n    ca,\n    headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/merge-patch+json' } : {}) }\n  }, body && JSON.stringify(body));\n  if (result.status < 200 || result.status >= 300) throw new Error(`Kubernetes API ${result.status}: ${result.data.slice(0, 300)}`);\n  return JSON.parse(result.data);\n}\n\nasync function internal(hostname, target, method = 'GET', headers = {}, body, timeout = 8000) {\n  return request({ protocol: 'http:', hostname, port: 8080, path: target, method, headers, timeout }, body);\n}\n\nasync function readBody(requestObject, limit = 65536) {\n  const chunks = [];\n  let size = 0;\n  for await (const chunk of requestObject) {\n    size += chunk.length;\n    if (size > limit) throw new Error('Request body too large');\n    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));\n  }\n  return Buffer.concat(chunks);\n}\n\nfunction spendCpu() {\n  crypto.pbkdf2Sync('landscape-lab', 'bounded-work', 20000, 32, 'sha256');\n}\n\nfunction createStats() {\n  const startedAt = Date.now();\n  const latencies = [];\n  const seconds = new Map();\n  let total = 0;\n  let inFlight = 0;\n  let errors = 0;\n  return {\n    begin() {\n      total += 1;\n      inFlight += 1;\n      const second = Math.floor(Date.now() / 1000);\n      seconds.set(second, (seconds.get(second) || 0) + 1);\n      if (seconds.size > 130) for (const key of seconds.keys()) if (key < second - 120) seconds.delete(key);\n    },\n    end(milliseconds, ok) {\n      inFlight = Math.max(0, inFlight - 1);\n      if (!ok) errors += 1;\n      latencies.push(milliseconds);\n      if (latencies.length > 200) latencies.shift();\n    },\n    snapshot() {\n      const now = Math.floor(Date.now() / 1000);\n      let recent = 0;\n      for (const [second, count] of seconds) if (second > now - 5) recent += count;\n      const sorted = [...latencies].sort((left, right) => left - right);\n      return {\n        pod: podName,\n        totalRequests: total,\n        inFlight,\n        errors,\n        requestsPerSecond: Math.round((recent / 5) * 10) / 10,\n        latencyP95Ms: sorted.length ? sorted[Math.floor(sorted.length * 0.95)] : 0,\n        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000)\n      };\n    }\n  };\n}\n\nasync function relay(requestObject, options) {\n  const body = requestObject.method === 'GET' || requestObject.method === 'HEAD' ? undefined : await readBody(requestObject);\n  const headers = {};\n  for (const [name, value] of Object.entries(requestObject.headers)) {\n    if (!hopByHop.has(name) && value !== undefined) headers[name] = value;\n  }\n  return request({\n    protocol: 'http:',\n    hostname: options.hostname,\n    port: options.port || 8080,\n    path: requestObject.url,\n    method: requestObject.method,\n    headers,\n    timeout: options.timeout || componentTimeout\n  }, body);\n}\n\nasync function proxy(requestObject, response, stats, options) {\n  stats.begin();\n  const startedAt = Date.now();\n  let ok = false;\n  try {\n    const result = await relay(requestObject, options);\n    ok = result.status < 500;\n    send(response, result.status, result.data, result.headers['content-type'] || 'application/octet-stream', {\n      'cache-control': result.headers['cache-control'] || 'no-store',\n      'x-cdn-cache': result.headers['x-cdn-cache'] || 'BYPASS'\n    });\n    return result.status;\n  } catch (error) {\n    send(response, 502, { error: `Upstream ${options.hostname} unavailable: ${error.message}` });\n    return 502;\n  } finally {\n    stats.end(Date.now() - startedAt, ok);\n  }\n}\n\nfunction createGateway(stats) {\n  return (requestObject, response) => {\n    const target = new URL(requestObject.url, 'http://lab').pathname;\n    if (target === '/health') return send(response, 200, { ok: true, role, pod: podName });\n    if (target === '/_gateway/stats') return send(response, 200, { role: 'gateway', upstream: 'loadbalancer', ...stats.snapshot() });\n    return proxy(requestObject, response, stats, { hostname: 'loadbalancer' });\n  };\n}\n\nasync function resolveBackends(service) {\n  try {\n    const records = await dns.promises.resolveSrv(`_http._tcp.${service}.${namespace}.svc.cluster.local`);\n    if (records.length) return records.map(record => ({ hostname: record.name.replace(/\\.$/, ''), port: record.port }));\n  } catch {}\n  return [{ hostname: service, port: 8080 }];\n}\n\nfunction createLoadBalancer(stats) {\n  let backends = [];\n  let refreshedAt = 0;\n  let cursor = 0;\n  const usage = new Map();\n  async function pool() {\n    if (!backends.length || Date.now() - refreshedAt > 5000) {\n      backends = await resolveBackends('cdn-headless');\n      refreshedAt = Date.now();\n    }\n    return backends;\n  }\n  return async (requestObject, response) => {\n    const target = new URL(requestObject.url, 'http://lab').pathname;\n    if (target === '/health') return send(response, 200, { ok: true, role, pod: podName });\n    if (target === '/_lb/stats') {\n      const available = await pool();\n      return send(response, 200, {\n        role: 'loadbalancer',\n        algorithm: 'round-robin',\n        backends: available.map(item => item.hostname),\n        distribution: [...usage.entries()].map(([hostname, requests]) => ({ pod: hostname, requests })),\n        ...stats.snapshot()\n      });\n    }\n    const available = await pool();\n    const backend = available[cursor++ % available.length];\n    usage.set(backend.hostname, (usage.get(backend.hostname) || 0) + 1);\n    const status = await proxy(requestObject, response, stats, { hostname: backend.hostname, port: backend.port });\n    if (status === 502) {\n      backends = [];\n      refreshedAt = 0;\n    }\n    return status;\n  };\n}\n\nfunction createCdn(stats) {\n  const cache = new Map();\n  const ttl = 15000;\n  let hits = 0;\n  let misses = 0;\n  let bytesSaved = 0;\n  return async (requestObject, response) => {\n    const target = new URL(requestObject.url, 'http://lab').pathname;\n    if (target === '/health') return send(response, 200, { ok: true, role, pod: podName });\n    if (target === '/_cdn/stats') {\n      const lookups = hits + misses;\n      return send(response, 200, {\n        role: 'cdn',\n        ttlSeconds: ttl / 1000,\n        entries: cache.size,\n        hits,\n        misses,\n        hitRatio: lookups ? Math.round((hits / lookups) * 100) : 0,\n        bytesSaved,\n        ...stats.snapshot()\n      });\n    }\n    const cacheable = requestObject.method === 'GET' && !target.startsWith('/api/') && target !== '/work' && !target.startsWith('/_');\n    if (cacheable) {\n      const entry = cache.get(requestObject.url);\n      if (entry && entry.expires > Date.now()) {\n        hits += 1;\n        bytesSaved += entry.size;\n        send(response, 200, entry.data, entry.type, { 'cache-control': 'no-store', 'x-cdn-cache': 'HIT' });\n        return 200;\n      }\n      misses += 1;\n    }\n    stats.begin();\n    const startedAt = Date.now();\n    let ok = false;\n    try {\n      const result = await relay(requestObject, { hostname: 'ui' });\n      ok = result.status < 500;\n      const type = result.headers['content-type'] || 'application/octet-stream';\n      if (cacheable && result.status === 200) {\n        cache.set(requestObject.url, { data: result.data, type, expires: Date.now() + ttl, size: Buffer.byteLength(result.data) });\n        if (cache.size > 50) cache.delete(cache.keys().next().value);\n      }\n      send(response, result.status, result.data, type, { 'cache-control': 'no-store', 'x-cdn-cache': 'MISS' });\n      return result.status;\n    } catch (error) {\n      send(response, 502, { error: `UI unavailable: ${error.message}` });\n      return 502;\n    } finally {\n      stats.end(Date.now() - startedAt, ok);\n    }\n  };\n}\n\nfunction createUi() {\n  const assets = {\n    '/': ['index.html', 'text/html; charset=utf-8'],\n    '/index.html': ['index.html', 'text/html; charset=utf-8'],\n    '/app.css': ['app.css', 'text/css; charset=utf-8'],\n    '/browser.js': ['browser.js', 'text/javascript; charset=utf-8'],\n    '/architecture.svg': ['architecture.svg', 'image/svg+xml; charset=utf-8']\n  };\n  return async (requestObject, response) => {\n    const target = new URL(requestObject.url, 'http://lab').pathname;\n    if (target === '/health') return send(response, 200, { ok: true, role, pod: podName });\n    if (requestObject.method === 'GET' && assets[target]) {\n      const [file, type] = assets[target];\n      return send(response, 200, fs.readFileSync(path.join('/app', file)), type, { 'cache-control': 'no-store' });\n    }\n    try {\n      const body = requestObject.method === 'GET' || requestObject.method === 'HEAD' ? undefined : await readBody(requestObject);\n      const result = await internal('api', requestObject.url, requestObject.method, {\n        host: requestObject.headers.host || '',\n        origin: requestObject.headers.origin || '',\n        'content-type': requestObject.headers['content-type'] || ''\n      }, body, target === '/api/status' ? 20000 : 8000);\n      send(response, result.status, result.data, result.headers['content-type'] || 'application/json; charset=utf-8');\n      return result.status;\n    } catch (error) {\n      send(response, 502, { error: `API unavailable: ${error.message}` });\n      return 502;\n    }\n  };\n}\n\nfunction readShared(name, fallback) {\n  try {\n    const parsed = JSON.parse(fs.readFileSync(path.join(sharedDirectory, name), 'utf8'));\n    return parsed && typeof parsed === 'object' ? parsed : fallback;\n  } catch {\n    return fallback;\n  }\n}\n\nfunction primaryName() {\n  const marker = readShared('primary.json', { primary: 'database-0' });\n  return typeof marker.primary === 'string' ? marker.primary : 'database-0';\n}\n\nfunction listBackups() {\n  const directory = path.join(sharedDirectory, 'backups');\n  let names = [];\n  try {\n    names = fs.readdirSync(directory).filter(name => name.endsWith('.json') && name !== 'latest.json').sort();\n  } catch {}\n  return { count: names.length, latest: names.length ? names[names.length - 1] : null };\n}\n\nasync function promoteReplica(current, clients = {}) {\n  const kubeClient = clients.kube || kube;\n  const internalClient = clients.internal || internal;\n  let pods;\n  try {\n    pods = await kubeClient(`/api/v1/namespaces/${namespace}/pods?labelSelector=${label}`);\n  } catch {\n    return null;\n  }\n  const candidates = (pods.items || []).filter(pod => /^database-/.test(pod.metadata.name) && pod.metadata.name !== current && pod.status?.phase === 'Running' && (pod.status.containerStatuses || []).some(item => item.name === 'database' && item.ready));\n  for (const pod of candidates) {\n    try {\n      const result = await internalClient(`${pod.metadata.name}.database`, '/promote', 'POST', {}, undefined, 4000);\n      if (result.status === 200) return pod.metadata.name;\n    } catch {}\n  }\n  return null;\n}\n\nasync function dbRequest(target, method = 'GET', attempt = 0, clients = {}) {\n  const internalClient = clients.internal || internal;\n  const active = primaryName();\n  try {\n    const result = await internalClient(`${active}.database`, target, method, {}, undefined, 5000);\n    if (result.status < 200 || result.status >= 300) {\n      const error = new Error(`Database HTTP ${result.status}: ${result.data.slice(0, 200)}`);\n      error.status = result.status;\n      throw error;\n    }\n    return { data: JSON.parse(result.data), pod: active, failover: attempt > 0 };\n  } catch (error) {\n    if (attempt > 0 || error.status === 409) throw error;\n    const promoted = await promoteReplica(active, clients);\n    if (!promoted) throw error;\n    return dbRequest(target, method, attempt + 1, clients);\n  }\n}\n\nasync function componentStats(hostname, target) {\n  const result = await internal(hostname, target, 'GET', {}, undefined, 4000);\n  if (result.status !== 200) throw new Error(`${hostname} HTTP ${result.status}`);\n  return JSON.parse(result.data);\n}\n\nasync function collectStatus(clients = {}) {\n  const kubeClient = clients.kube || kube;\n  const internalClient = clients.internal || internal;\n  const apps = `/apis/apps/v1/namespaces/${namespace}`;\n  const core = `/api/v1/namespaces/${namespace}`;\n  const tasks = {\n    deployments: () => kubeClient(`${apps}/deployments?labelSelector=${label}`),\n    statefulsets: () => kubeClient(`${apps}/statefulsets?labelSelector=${label}`),\n    pods: () => kubeClient(`${core}/pods?labelSelector=${label}`),\n    hpas: () => kubeClient(`/apis/autoscaling/v2/namespaces/${namespace}/horizontalpodautoscalers?labelSelector=${label}`),\n    metrics: () => kubeClient(`/apis/metrics.k8s.io/v1beta1/namespaces/${namespace}/pods?labelSelector=${label}`),\n    events: async () => {\n      const data = await kubeClient(`${core}/events?limit=60`);\n      data.items = data.items\n        .filter(event => !event.involvedObject?.name || isLabPod(event.involvedObject.name) || event.involvedObject.name === 'database' || event.involvedObject.name === 'traffic')\n        .sort((left, right) => String(right.lastTimestamp || right.eventTime || '').localeCompare(String(left.lastTimestamp || left.eventTime || '')))\n        .slice(0, 12);\n      return data;\n    },\n    gateway: () => componentStats('gateway', '/_gateway/stats'),\n    loadbalancer: () => componentStats('loadbalancer', '/_lb/stats'),\n    cdn: () => componentStats('cdn', '/_cdn/stats'),\n    database: async () => {\n      const result = await dbRequest('/state', 'GET', 0, { internal: internalClient });\n      return { ...result.data, activePod: result.pod, failover: result.failover };\n    },\n    backups: () => listBackups()\n  };\n  const entries = await Promise.all(Object.entries(tasks).map(async ([name, task]) => {\n    try {\n      return [name, { data: await task() }];\n    } catch (error) {\n      return [name, { error: error.message }];\n    }\n  }));\n  const result = Object.fromEntries(entries);\n  if (result.pods.data) result.pods.data.items = result.pods.data.items.filter(pod => isLabPod(pod.metadata.name));\n  return result;\n}\n\nconst controls = {\n  '/api/traffic': async (data, clients) => {\n    if (!data || !Number.isInteger(data.level) || data.level < 0 || data.level > 3) {\n      const error = new Error('level must be an integer between 0 and 3');\n      error.status = 400;\n      throw error;\n    }\n    await (clients.kube || kube)(`/apis/apps/v1/namespaces/${namespace}/deployments/traffic/scale`, 'PATCH', { spec: { replicas: data.level } });\n    return { level: data.level };\n  },\n  '/api/database/increment': async (data, clients) => {\n    const result = await dbRequest('/increment', 'POST', 0, clients);\n    return { ...result.data, activePod: result.pod };\n  },\n  '/api/database/backup': async (data, clients) => {\n    const result = await dbRequest('/backup', 'POST', 0, clients);\n    return result.data;\n  },\n  '/api/database/restore': async (data, clients) => {\n    const result = await dbRequest('/restore', 'POST', 0, clients);\n    return result.data;\n  },\n  '/api/database/failover': async () => {\n    await kube(`/api/v1/namespaces/${namespace}/pods/database-0`, 'DELETE');\n    return { message: 'Primary pod deletion requested. The API fails over to the replica and promotes it.' };\n  },\n  '/api/database/scale': async (data, clients) => {\n    if (!data || ![0, 2].includes(data.replicas)) {\n      const error = new Error('replicas must be 0 (disaster) or 2 (recover)');\n      error.status = 400;\n      throw error;\n    }\n    await (clients.kube || kube)(`/apis/apps/v1/namespaces/${namespace}/statefulsets/database/scale`, 'PATCH', { spec: { replicas: data.replicas } });\n    return { replicas: data.replicas };\n  }\n};\n\nasync function apiHandler(requestObject, response, clients = { kube, internal }) {\n  const target = new URL(requestObject.url, 'http://lab').pathname;\n  if (requestObject.method === 'GET' && target === '/health') return send(response, 200, { ok: true, role, pod: podName });\n  if (requestObject.method === 'GET' && target === '/work') {\n    spendCpu();\n    workCalls += 1;\n    if (workCalls % 20 === 0) dbRequest('/touch', 'POST', 0, clients).catch(() => {});\n    return send(response, 200, { ok: true });\n  }\n  if (requestObject.method === 'GET' && target === '/api/status') return send(response, 200, await collectStatus(clients));\n  const control = controls[target];\n  if (requestObject.method !== 'POST' || !control) return send(response, 404, { error: 'Not found' });\n  if (!isSameOriginMutation(requestObject)) return send(response, 403, { error: 'Same-origin JSON request required' });\n  let data;\n  try {\n    const body = await readBody(requestObject);\n    data = JSON.parse(body.toString('utf8') || '{}');\n  } catch {\n    return send(response, 400, { error: 'Invalid JSON body' });\n  }\n  try {\n    return send(response, 200, await control(data, clients));\n  } catch (error) {\n    return send(response, error.status || 503, { error: error.message });\n  }\n}\n\nfunction persistState(file, state) {\n  const temporary = `${file}.tmp`;\n  const descriptor = fs.openSync(temporary, 'w');\n  try {\n    fs.writeFileSync(descriptor, JSON.stringify(state));\n    fs.fsyncSync(descriptor);\n  } finally {\n    fs.closeSync(descriptor);\n  }\n  fs.renameSync(temporary, file);\n}\n\nfunction createDatabaseHandler(directory, options = {}) {\n  const shared = options.sharedDirectory || sharedDirectory;\n  const name = options.podName || podName;\n  const file = path.join(directory, 'state.json');\n  const markerFile = path.join(shared, 'primary.json');\n  fs.mkdirSync(directory, { recursive: true });\n\n  function load() {\n    try {\n      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));\n      if (!Number.isSafeInteger(parsed.counter) || parsed.counter < 0) throw new Error('Invalid persisted database state');\n      return { counter: parsed.counter, touches: Number.isSafeInteger(parsed.touches) ? parsed.touches : 0 };\n    } catch (error) {\n      if (error.code !== 'ENOENT') throw error;\n      return { counter: 0, touches: 0 };\n    }\n  }\n\n  let state = load();\n\n  function readMarker() {\n    try {\n      const parsed = JSON.parse(fs.readFileSync(markerFile, 'utf8'));\n      if (parsed && typeof parsed.primary === 'string') return { primary: parsed.primary, epoch: Number(parsed.epoch) || 1 };\n    } catch {}\n    return { primary: 'database-0', epoch: 1 };\n  }\n\n  function writeMarker(primary, epoch) {\n    fs.mkdirSync(shared, { recursive: true });\n    fs.writeFileSync(markerFile, JSON.stringify({ primary, epoch }));\n  }\n\n  if (!fs.existsSync(markerFile) && name === 'database-0') writeMarker('database-0', 1);\n\n  const isPrimary = () => readMarker().primary === name;\n  const details = () => ({ ...state, pod: name, role: isPrimary() ? 'primary' : 'replica', primary: isPrimary(), primaryPod: readMarker().primary, epoch: readMarker().epoch });\n\n  function save() {\n    persistState(file, state);\n  }\n\n  function handler(requestObject, response) {\n    if (requestObject.method === 'GET' && (requestObject.url === '/health' || requestObject.url === '/state')) return send(response, 200, details());\n    if (requestObject.method === 'POST' && requestObject.url === '/promote') {\n      if (!isPrimary()) writeMarker(name, readMarker().epoch + 1);\n      return send(response, 200, details());\n    }\n    if (requestObject.method === 'POST' && requestObject.url === '/replicate') return send(response, 409, { error: 'Push replication is not used; replicas pull from the primary' });\n    if (requestObject.method === 'POST' && requestObject.url === '/backup') {\n      if (!isPrimary()) return send(response, 409, { error: 'Only the primary accepts backups', primary: readMarker().primary });\n      const directoryPath = path.join(shared, 'backups');\n      fs.mkdirSync(directoryPath, { recursive: true });\n      const snapshot = { ...state, createdAt: new Date().toISOString(), pod: name, epoch: readMarker().epoch };\n      const stamp = snapshot.createdAt.replace(/[:.]/g, '-');\n      fs.writeFileSync(path.join(directoryPath, `${stamp}.json`), JSON.stringify(snapshot));\n      fs.writeFileSync(path.join(directoryPath, 'latest.json'), JSON.stringify(snapshot));\n      const files = fs.readdirSync(directoryPath).filter(item => item !== 'latest.json' && item.endsWith('.json')).sort();\n      for (const item of files.slice(0, Math.max(0, files.length - 10))) fs.rmSync(path.join(directoryPath, item), { force: true });\n      return send(response, 200, { ...state, backup: `${stamp}.json` });\n    }\n    if (requestObject.method === 'POST' && requestObject.url === '/restore') {\n      if (!isPrimary()) return send(response, 409, { error: 'Only the primary can restore', primary: readMarker().primary });\n      let snapshot;\n      try {\n        snapshot = JSON.parse(fs.readFileSync(path.join(shared, 'backups', 'latest.json'), 'utf8'));\n      } catch {\n        return send(response, 404, { error: 'No backup exists yet; take a backup first' });\n      }\n      state = { counter: snapshot.counter, touches: snapshot.touches || 0 };\n      save();\n      return send(response, 200, { ...state, restoredFrom: snapshot.createdAt || 'latest.json' });\n    }\n    if (requestObject.method === 'POST' && (requestObject.url === '/increment' || requestObject.url === '/touch')) {\n      if (!isPrimary()) return send(response, 409, { error: 'Replica is read-only', primary: readMarker().primary });\n      if (requestObject.url === '/increment') {\n        if (state.counter >= Number.MAX_SAFE_INTEGER) return send(response, 409, { error: 'Counter limit reached' });\n        state = { ...state, counter: state.counter + 1 };\n      } else {\n        state = { ...state, touches: state.touches + 1 };\n      }\n      save();\n      return send(response, 200, details());\n    }\n    return send(response, 404, { error: 'Not found' });\n  }\n\n  handler.adopt = remote => {\n    if (isPrimary() || !remote || !Number.isSafeInteger(remote.counter)) return;\n    if (remote.counter >= state.counter) {\n      state = { counter: remote.counter, touches: Number.isSafeInteger(remote.touches) ? remote.touches : state.touches };\n      save();\n    }\n  };\n  handler.role = isPrimary;\n  return handler;\n}\n\nasync function replicaSync(database) {\n  const marker = readShared('primary.json', { primary: 'database-0' });\n  if (marker.primary === podName || podName === 'local') return;\n  try {\n    const result = await internal(`${marker.primary}.database`, '/state', 'GET', {}, undefined, 2000);\n    if (result.status === 200) database.adopt(JSON.parse(result.data));\n  } catch {}\n}\n\nasync function trafficLoop() {\n  while (true) {\n    try {\n      await internal('gateway', `/work?source=traffic&t=${Date.now()}`);\n    } catch (error) {\n      console.error('Traffic request failed:', error.message);\n    }\n    await new Promise(resolve => setTimeout(resolve, 15));\n  }\n}\n\nfunction start() {\n  if (role === 'traffic') {\n    for (let worker = 0; worker < 4; worker += 1) trafficLoop();\n    return;\n  }\n  let handler;\n  if (role === 'database') {\n    handler = createDatabaseHandler(dataDirectory);\n    setInterval(() => replicaSync(handler).catch(error => console.error('Replica sync failed:', error.message)), 2000).unref();\n  } else if (role === 'api') {\n    handler = apiHandler;\n  } else if (role === 'gateway') {\n    handler = createGateway(createStats());\n  } else if (role === 'loadbalancer') {\n    handler = createLoadBalancer(createStats());\n  } else if (role === 'cdn') {\n    handler = createCdn(createStats());\n  } else {\n    handler = createUi();\n  }\n  http.createServer((requestObject, response) => {\n    Promise.resolve().then(() => handler(requestObject, response)).catch(error => {\n      console.error(error);\n      if (!response.headersSent) send(response, 503, { error: error.message });\n      else response.destroy();\n    });\n  }).listen(port, '0.0.0.0', () => console.log(`${role} ${podName} listening on ${port}`));\n}\n\nif (require.main === module) start();\nmodule.exports = {\n  apiHandler,\n  collectStatus,\n  createCdn,\n  createDatabaseHandler,\n  createGateway,\n  createLoadBalancer,\n  createUi,\n  dbRequest,\n  listBackups,\n  primaryName,\n  resolveBackends,\n  spendCpu\n};\n"
+  security.js: "'use strict';\n\nfunction isSameOriginMutation(request) {\n  const origin = request.headers.origin;\n  const host = request.headers.host;\n  if (!origin || !host || request.headers['content-type'] !== 'application/json') return false;\n  try {\n    const url = new URL(origin);\n    return (url.protocol === 'http:' || url.protocol === 'https:') && url.host === host && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);\n  } catch {\n    return false;\n  }\n}\n\nfunction isLabPod(name) {\n  return typeof name === 'string' && /^(gateway|loadbalancer|cdn|ui|api|database|traffic)-/.test(name);\n}\n\nmodule.exports = { isSameOriginMutation, isLabPod };\n"
+  index.html: "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>Kubernetes Landscape Control Room</title>\n  <link rel=\"stylesheet\" href=\"/app.css\">\n  <script src=\"/browser.js\" defer></script>\n</head>\n<body>\n  <header><div class=\"wrap masthead\"><div><div class=\"eyebrow\">K3S LAB · SEPARATE NETWORK</div><h1>Kubernetes landscape</h1></div><div class=\"connection\"><span class=\"dot\" id=\"connection-dot\"></span><span id=\"connection\">Connecting</span></div></div></header>\n  <main class=\"wrap\">\n    <div class=\"intro\"><div><h2>Cluster control room</h2><p>Live workloads, autoscaling and disaster recovery</p></div><span id=\"updated\">Waiting for first update</span></div>\n    <div id=\"alert\" class=\"alert\" role=\"status\" hidden></div>\n    <section class=\"flow\" aria-label=\"Request path\"><span>Browser</span><b>→</b><span>Traefik ingress</span><b>→</b><span>Gateway</span><b>→</b><span>Load balancer</span><b>→</b><span>CDN</span><b>→</b><span>UI</span><b>→</b><span>API</span><b>→</b><span>Database</span></section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">EDGE PIPELINE</div><h2>Component usage</h2></div></div>\n      <p class=\"muted\">Round-robin balancing across CDN pods, cache hit ratio, and per-component request rate.</p>\n      <div class=\"table-wrap\"><table><thead><tr><th>Component</th><th>Ready / desired</th><th>Requests/sec</th><th>In flight</th><th>Detail</th></tr></thead><tbody id=\"components\"></tbody></table></div>\n    </section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">AUTOSCALING</div><h2>Traffic &amp; pod scaling</h2></div><div class=\"actions\"><button id=\"traffic-off\" class=\"secondary\">Off</button><button id=\"traffic-low\">Low load</button><button id=\"traffic-high\">High load</button></div></div>\n      <p class=\"muted\" id=\"traffic-state\">Reading traffic state...</p>\n      <div class=\"table-wrap\"><table><thead><tr><th>Workload</th><th>Ready / desired</th><th>CPU target</th><th>Current CPU</th><th>HPA range</th></tr></thead><tbody id=\"workloads\"></tbody></table></div>\n      <p class=\"note\">The traffic generator drives the full chain. HPAs need metrics-server samples, so scale-up and scale-down take tens of seconds. Scale-down is intentionally slow (stabilisation window).</p>\n    </section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">PRIMARY / REPLICA + BACKUPS</div><h2>Database &amp; disaster recovery</h2></div><div class=\"actions\"><button id=\"increment\">Add to counter</button><button id=\"backup\" class=\"secondary\">Back up now</button></div></div>\n      <div class=\"database\">\n        <div><div class=\"metric-label\">SAVED COUNTER</div><div class=\"counter\" id=\"counter\">—</div></div>\n        <div><div class=\"metric-label\">DB QUERIES</div><div class=\"counter small\" id=\"touches\">—</div></div>\n        <div><div class=\"metric-label\">PRIMARY POD</div><div class=\"primary-pod\" id=\"database-primary\">—</div></div>\n      </div>\n      <p id=\"database-status\">Checking database...</p>\n      <div class=\"actions danger-actions\"><button id=\"failover\" class=\"danger\">Simulate primary failure</button><button id=\"disaster\" class=\"danger\">Simulate total DB loss</button><button id=\"recover\" class=\"secondary\">Recover from backup</button><button id=\"restore\" class=\"secondary\">Restore latest backup</button></div>\n      <p class=\"note\">Replica pulls from the primary every few seconds, so a promotion loses at most a couple of seconds of writes. Backups are written to a host-mounted volume. Recovery rolls the counter back to the latest snapshot (RPO), and a full StatefulSet restart is the RTO exercise.</p>\n    </section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">SCHEDULER VIEW</div><h2>Pods</h2></div></div>\n      <div class=\"table-wrap\"><table><thead><tr><th>Name</th><th>Phase</th><th>Ready</th><th>Restarts</th><th>CPU</th></tr></thead><tbody id=\"pods\"></tbody></table></div>\n    </section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">CONTROL PLANE</div><h2>Recent events</h2></div></div>\n      <ul id=\"events\" class=\"events\"></ul>\n    </section>\n\n    <section class=\"section\">\n      <div class=\"section-title\"><div><div class=\"eyebrow\">CKA PREPARATION</div><h2>Practice commands</h2></div></div>\n      <p class=\"muted\">Run these on the Linux host. They use the lab's own kubeconfig inside the K3s container.</p>\n      <pre class=\"commands\">docker compose -f kubernetes.yml exec k3s kubectl get all -n landscape-lab\ndocker compose -f kubernetes.yml exec k3s kubectl get hpa -n landscape-lab -w\ndocker compose -f kubernetes.yml exec k3s kubectl describe statefulset database -n landscape-lab\ndocker compose -f kubernetes.yml exec k3s kubectl get pvc,pv -n landscape-lab\ndocker compose -f kubernetes.yml exec k3s kubectl rollout status deployment/api -n landscape-lab\ndocker compose -f kubernetes.yml exec k3s kubectl scale deployment/traffic -n landscape-lab --replicas=2\ndocker compose -f kubernetes.yml exec k3s kubectl delete pod database-0 -n landscape-lab</pre>\n      <p class=\"note\">Open <a href=\"/architecture.svg\">the architecture diagram</a> and read <code>kubernetes/CKA-STUDY-GUIDE.md</code> in the repository for exercises mapped to the CKA domains.</p>\n    </section>\n  </main>\n  <footer class=\"wrap\">K3s · Traefik · Deployment + HPA · StatefulSet + PVC · NetworkPolicy · shared PVC backups</footer>\n</body>\n</html>\n"
+  app.css: ":root { font-family: 'Trebuchet MS', sans-serif; color: #142327; background: #f5f7f5; font-synthesis: none; }\n* { box-sizing: border-box; }\nbody { margin: 0; background: linear-gradient(180deg, #edf4f0 0, #f5f7f5 300px); }\n.wrap { width: min(1120px, calc(100% - 48px)); margin: auto; }\nheader { background: #102e2e; color: white; border-bottom: 4px solid #d8b558; }\n.masthead { min-height: 110px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }\nh1, h2 { font-family: Georgia, serif; margin: 0; }\nh1 { font-size: 30px; }\nh2 { font-size: 22px; }\n.eyebrow { font-size: 11px; font-weight: 700; color: #48726a; margin-bottom: 8px; }\nheader .eyebrow { color: #9dc9b9; }\n.connection { display: flex; align-items: center; gap: 8px; font-size: 13px; }\n.dot { width: 9px; height: 9px; border-radius: 50%; background: #dfaa4f; }\n.dot.live { background: #75d3a6; }\n.dot.failed { background: #ee817a; }\n.intro { display: flex; justify-content: space-between; align-items: end; gap: 16px; padding: 35px 0 20px; }\n.intro p, .muted { color: #647674; margin: 5px 0 0; font-size: 14px; }\n#updated { font-size: 12px; color: #647674; }\n.flow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 18px 20px; background: #fff; border: 1px solid #dce5df; border-left: 4px solid #5b9983; font-size: 13px; font-weight: 600; }\n.flow b { color: #8aa69b; }\n.section { border-bottom: 1px solid #d5dfd9; padding: 30px 0; }\n.section-title { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }\n.actions { display: flex; flex-wrap: wrap; gap: 8px; }\n.danger-actions { margin-top: 16px; }\nbutton { border: 1px solid #164d42; background: #164d42; color: white; border-radius: 4px; padding: 10px 15px; font: 600 13px 'Trebuchet MS', sans-serif; cursor: pointer; }\nbutton:hover { background: #236957; }\nbutton.secondary { color: #164d42; background: transparent; }\nbutton.danger { color: #9b3733; border-color: #c99590; background: transparent; }\nbutton:disabled { opacity: .5; cursor: not-allowed; }\nbutton:focus-visible, a:focus-visible { outline: 3px solid #d8a23c; outline-offset: 2px; }\n.table-wrap { overflow-x: auto; margin-top: 18px; }\ntable { width: 100%; border-collapse: collapse; min-width: 620px; text-align: left; }\nth { font-size: 11px; color: #667b75; text-transform: uppercase; letter-spacing: .04em; padding: 10px; border-bottom: 2px solid #cfdad4; }\ntd { padding: 10px; border-bottom: 1px solid #e2e9e5; font-size: 13px; vertical-align: top; }\ntd:first-child { font-weight: 700; }\ntr:hover td { background: #f0f5f2; }\n.alert { margin-top: 16px; padding: 12px 14px; background: #fff5e5; border: 1px solid #e2c48c; color: #73571f; font-size: 13px; }\n.database { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin: 18px 0; padding: 18px 20px; background: #fff; border: 1px solid #dce5df; }\n.metric-label { font-size: 10px; font-weight: 700; color: #6c817a; letter-spacing: .05em; }\n.counter { font-family: Georgia, serif; font-size: 40px; line-height: 1.1; }\n.counter.small { font-size: 28px; }\n.primary-pod { font-family: monospace; font-size: 15px; padding-top: 10px; }\n.note { font-size: 12px; color: #6f827c; margin: 14px 0 0; max-width: 900px; }\n.events { list-style: none; margin: 18px 0 0; padding: 0; font-size: 13px; }\n.events li { padding: 10px 0; border-bottom: 1px solid #e2e9e5; display: grid; grid-template-columns: 150px 90px 1fr; gap: 12px; }\n.events .reason { font-weight: 700; }\n.events time { color: #7a8d87; font-size: 12px; }\n.events .empty { color: #7a8d87; display: block; }\n.commands { background: #102e2e; color: #d9efe5; padding: 16px 18px; overflow-x: auto; font-size: 12.5px; line-height: 1.8; border-radius: 4px; }\ncode { background: #e7efea; padding: 1px 5px; border-radius: 3px; font-size: .92em; }\na { color: #175c9a; }\nfooter { padding: 26px 0 34px; color: #6b7f79; font-size: 12px; }\n"
+  browser.js: "'use strict';\n\nconst element = id => document.getElementById(id);\nlet busy = false;\n\nfunction row(values) {\n  const result = document.createElement('tr');\n  for (const value of values) {\n    const cell = document.createElement('td');\n    cell.textContent = String(value ?? '—');\n    result.appendChild(cell);\n  }\n  return result;\n}\n\nfunction replicaText(deployments, name) {\n  const deployment = deployments.find(item => item.metadata.name === name);\n  return deployment ? `${deployment.status.readyReplicas || 0} / ${deployment.spec.replicas}` : 'Unavailable';\n}\n\nfunction hpaCpu(hpas, name) {\n  const hpa = hpas.find(item => item.metadata.name === name);\n  if (!hpa) return { target: '—', current: '—', range: '—' };\n  const find = list => list?.find(item => item.type === 'Resource' && item.resource.name === 'cpu')?.resource;\n  const current = find(hpa.status?.currentMetrics)?.current?.averageUtilization;\n  const target = find(hpa.spec?.metrics)?.target?.averageUtilization;\n  return { target: target == null ? '—' : `${target}%`, current: current == null ? 'Pending' : `${current}%`, range: `${hpa.spec.minReplicas}–${hpa.spec.maxReplicas}` };\n}\n\nfunction render(status) {\n  const deployments = status.deployments.data?.items || [];\n  const hpas = status.hpas.data?.items || [];\n  const pods = status.pods.data?.items || [];\n  const metrics = status.metrics.data?.items || [];\n  const gateway = status.gateway.data || {};\n  const loadbalancer = status.loadbalancer.data || {};\n  const cdn = status.cdn.data || {};\n  const database = status.database.data || {};\n\n  const distribution = (loadbalancer.distribution || []).map(item => `${item.pod}: ${item.requests}`).join(' · ') || 'No samples yet';\n  element('components').replaceChildren(\n    row(['Gateway', replicaText(deployments, 'gateway'), gateway.requestsPerSecond ?? '—', gateway.inFlight ?? '—', `p95 ${gateway.latencyP95Ms ?? 0} ms`]),\n    row(['Load balancer', replicaText(deployments, 'loadbalancer'), loadbalancer.requestsPerSecond ?? '—', loadbalancer.inFlight ?? '—', distribution]),\n    row(['CDN', replicaText(deployments, 'cdn'), cdn.requestsPerSecond ?? '—', cdn.inFlight ?? '—', `${cdn.hitRatio ?? 0}% cache hit · ${cdn.entries ?? 0} objects`]),\n    row(['UI', replicaText(deployments, 'ui'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('ui-')).length} pod(s) reporting`]),\n    row(['API', replicaText(deployments, 'api'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('api-')).length} pod(s) reporting`])\n  );\n\n  element('workloads').replaceChildren(...['gateway', 'loadbalancer', 'cdn', 'ui', 'api'].map(name => {\n    const cpu = hpaCpu(hpas, name);\n    return row([name.toUpperCase(), replicaText(deployments, name), cpu.target, cpu.current, cpu.range]);\n  }));\n\n  const traffic = deployments.find(item => item.metadata.name === 'traffic');\n  const level = traffic ? traffic.spec.replicas : 0;\n  const labels = ['off', 'low', 'medium', 'high'];\n  element('traffic-state').textContent = traffic\n    ? `Traffic generator: ${labels[level] || level} load · ${traffic.status.readyReplicas || 0} of ${level} generator pod(s) ready`\n    : 'Traffic generator state unavailable';\n\n  element('counter').textContent = database.counter ?? '—';\n  element('touches').textContent = database.touches ?? '—';\n  element('database-primary').textContent = database.activePod ? `${database.activePod} (${database.role})` : '—';\n  if (status.database.error) {\n    element('database-status').textContent = `Database unavailable: ${status.database.error}`;\n  } else {\n    const backups = status.backups.data?.count ?? 0;\n    const failover = database.failover ? ' · automatic failover just promoted this replica' : '';\n    element('database-status').textContent = `Primary ${database.activePod} responding · epoch ${database.epoch} · ${backups} backup(s) on the host volume${failover}`;\n  }\n\n  element('pods').replaceChildren(...(pods.length ? pods.map(pod => {\n    const containers = pod.status.containerStatuses || [];\n    const podMetric = metrics.find(item => item.metadata.name === pod.metadata.name);\n    return row([\n      pod.metadata.name,\n      pod.status.phase,\n      `${containers.filter(item => item.ready).length} / ${pod.spec.containers.length}`,\n      containers.reduce((sum, item) => sum + item.restartCount, 0),\n      podMetric ? podMetric.containers.map(item => item.usage.cpu).join(', ') : 'Pending'\n    ]);\n  }) : [row(['No pods reported', '—', '—', '—', '—'])]));\n\n  const events = status.events.data?.items || [];\n  if (events.length) {\n    element('events').replaceChildren(...events.map(event => {\n      const item = document.createElement('li');\n      const name = document.createElement('span');\n      name.textContent = event.involvedObject?.name || '—';\n      const reason = document.createElement('span');\n      reason.className = 'reason';\n      reason.textContent = event.reason || event.type || 'Event';\n      const message = document.createElement('span');\n      message.textContent = event.message || '';\n      const time = document.createElement('time');\n      time.textContent = event.lastTimestamp ? new Date(event.lastTimestamp).toLocaleTimeString() : '';\n      item.append(name, reason, message, time);\n      return item;\n    }));\n  } else {\n    const item = document.createElement('li');\n    item.className = 'empty';\n    item.textContent = 'No recent lab events.';\n    element('events').replaceChildren(item);\n  }\n\n  const errors = Object.entries(status).filter(([, value]) => value.error).map(([name, value]) => `${name}: ${value.error}`);\n  element('alert').hidden = !errors.length;\n  element('alert').textContent = errors.join(' | ');\n  element('connection').textContent = 'Connected';\n  element('connection-dot').className = 'dot live';\n  element('updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;\n}\n\nasync function refresh() {\n  try {\n    const response = await fetch('/api/status', { cache: 'no-store' });\n    if (!response.ok) throw new Error(`HTTP ${response.status}`);\n    render(await response.json());\n  } catch (error) {\n    element('connection').textContent = 'Disconnected';\n    element('connection-dot').className = 'dot failed';\n    element('alert').hidden = false;\n    element('alert').textContent = `Status unavailable: ${error.message}`;\n  }\n}\n\nasync function command(path, body = {}) {\n  if (busy) return false;\n  busy = true;\n  document.querySelectorAll('button').forEach(button => { button.disabled = true; });\n  try {\n    const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });\n    const result = await response.json();\n    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);\n    await refresh();\n    return true;\n  } catch (error) {\n    element('alert').hidden = false;\n    element('alert').textContent = `Action failed: ${error.message}`;\n    return false;\n  } finally {\n    busy = false;\n    document.querySelectorAll('button').forEach(button => { button.disabled = false; });\n  }\n}\n\nelement('traffic-off').addEventListener('click', () => command('/api/traffic', { level: 0 }));\nelement('traffic-low').addEventListener('click', () => command('/api/traffic', { level: 1 }));\nelement('traffic-high').addEventListener('click', () => command('/api/traffic', { level: 3 }));\nelement('increment').addEventListener('click', () => command('/api/database/increment'));\nelement('backup').addEventListener('click', () => command('/api/database/backup'));\nelement('restore').addEventListener('click', () => { if (confirm('Restore the latest backup? Newer writes will be rolled back.')) command('/api/database/restore'); });\nelement('failover').addEventListener('click', () => { if (confirm('Delete the primary database pod? The replica will be promoted automatically.')) command('/api/database/failover'); });\nelement('disaster').addEventListener('click', () => { if (confirm('Scale the database StatefulSet to zero? All database access stops until recovery.')) command('/api/database/scale', { replicas: 0 }); });\nelement('recover').addEventListener('click', async () => {\n  if (!confirm('Scale the database back to two pods and restore the latest backup?')) return;\n  if (await command('/api/database/scale', { replicas: 2 })) await command('/api/database/restore');\n});\nrefresh();\nsetInterval(refresh, 5000);\n"
+  architecture.svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 900\" width=\"1200\" height=\"900\" role=\"img\" aria-labelledby=\"title desc\">\n  <title id=\"title\">Kubernetes landscape architecture</title>\n  <desc id=\"desc\">Request path from browser through Traefik ingress, gateway, load balancer, CDN, UI and API deployments with horizontal pod autoscalers, to a primary and replica database StatefulSet with host-mounted backups.</desc>\n  <defs>\n    <marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\">\n      <path d=\"M0,0 L10,5 L0,10 z\" fill=\"#3f6b5e\"/>\n    </marker>\n    <style>\n      .box { fill: #ffffff; stroke: #7fa596; stroke-width: 1.5; rx: 6; }\n      .box-dark { fill: #102e2e; stroke: #102e2e; }\n      .chip { fill: #eef5f1; stroke: #a9c4b8; stroke-width: 1; rx: 4; }\n      .warn { fill: #fdf6e8; stroke: #d8b558; stroke-width: 1.5; rx: 6; }\n      .t { font-family: 'Trebuchet MS', Arial, sans-serif; fill: #142327; font-size: 12px; }\n      .small { font-size: 10.5px; fill: #5c736c; }\n      .name { font-size: 13px; font-weight: 700; }\n      .mono { font-family: Consolas, monospace; font-size: 10.5px; fill: #40564f; }\n      .light { fill: #e8f4ee; }\n      .light-small { fill: #a9cfbf; font-size: 10.5px; }\n      .line { stroke: #3f6b5e; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }\n      .dash { stroke: #b0862c; stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrow); }\n      .label { font-family: 'Trebuchet MS', Arial, sans-serif; font-size: 10.5px; fill: #6b7f79; }\n    </style>\n  </defs>\n  <rect width=\"1200\" height=\"900\" fill=\"#f5f7f5\"/>\n  <text x=\"55\" y=\"48\" class=\"t\" font-size=\"24\" font-family=\"Georgia, serif\">Kubernetes landscape — request path, autoscaling and disaster recovery</text>\n  <text x=\"55\" y=\"70\" class=\"small\">K3s in a dedicated Compose network · namespace landscape-lab · NetworkPolicy segmented · host-persisted data</text>\n\n  <rect x=\"30\" y=\"92\" width=\"1140\" height=\"700\" fill=\"#fbfdfb\" stroke=\"#cfdad4\" stroke-width=\"1.5\" rx=\"10\"/>\n  <text x=\"50\" y=\"116\" class=\"label\">LINUX HOST · kubernetes.yml · docker compose network kubernetes-lab</text>\n\n  <g>\n    <rect x=\"52\" y=\"150\" width=\"112\" height=\"100\" class=\"box\"/>\n    <text x=\"66\" y=\"180\" class=\"t name\">Browser</text>\n    <text x=\"66\" y=\"200\" class=\"small\">Tap the lab at</text>\n    <text x=\"66\" y=\"217\" class=\"mono\">localhost:18080</text>\n    <text x=\"66\" y=\"237\" class=\"small\">same-origin</text>\n    <text x=\"66\" y=\"251\" class=\"small\">mutation checks</text>\n\n    <rect x=\"200\" y=\"150\" width=\"134\" height=\"100\" class=\"box\"/>\n    <text x=\"214\" y=\"180\" class=\"t name\">Traefik Ingress</text>\n    <text x=\"214\" y=\"200\" class=\"small\">K3s bundled controller</text>\n    <text x=\"214\" y=\"217\" class=\"mono\">ingressClassName:</text>\n    <text x=\"214\" y=\"232\" class=\"mono\">traefik</text>\n    <text x=\"214\" y=\"249\" class=\"small\">no TLS or auth</text>\n\n    <rect x=\"368\" y=\"150\" width=\"142\" height=\"100\" class=\"box\"/>\n    <text x=\"382\" y=\"180\" class=\"t name\">Gateway</text>\n    <text x=\"382\" y=\"200\" class=\"small\">Deployment + HPA</text>\n    <text x=\"382\" y=\"217\" class=\"small\">1–3 pods · request</text>\n    <text x=\"382\" y=\"234\" class=\"small\">counter, p95 latency</text>\n    <text x=\"382\" y=\"249\" class=\"mono\">/_gateway/stats</text>\n\n    <rect x=\"544\" y=\"150\" width=\"156\" height=\"100\" class=\"box\"/>\n    <text x=\"558\" y=\"180\" class=\"t name\">Load balancer</text>\n    <text x=\"558\" y=\"200\" class=\"small\">Deployment + HPA 1–3</text>\n    <text x=\"558\" y=\"217\" class=\"small\">round-robin across CDN</text>\n    <text x=\"558\" y=\"234\" class=\"small\">pod IPs (DNS SRV)</text>\n    <text x=\"558\" y=\"249\" class=\"mono\">/_lb/stats</text>\n\n    <rect x=\"728\" y=\"150\" width=\"150\" height=\"100\" class=\"box\"/>\n    <text x=\"742\" y=\"180\" class=\"t name\">CDN</text>\n    <text x=\"742\" y=\"200\" class=\"small\">Deployment + HPA 1–3</text>\n    <text x=\"742\" y=\"217\" class=\"small\">15 s GET cache, hit</text>\n    <text x=\"742\" y=\"234\" class=\"small\">ratio, bytes saved</text>\n    <text x=\"742\" y=\"249\" class=\"mono\">/_cdn/stats</text>\n  </g>\n\n  <path class=\"line\" d=\"M164,200 H196\"/>\n  <path class=\"line\" d=\"M334,200 H364\"/>\n  <path class=\"line\" d=\"M510,200 H540\"/>\n  <path class=\"line\" d=\"M700,200 H724\"/>\n\n  <path class=\"line\" d=\"M803,250 V288 H975 V326\"/>\n\n  <g>\n    <rect x=\"852\" y=\"330\" width=\"252\" height=\"126\" class=\"box\"/>\n    <text x=\"866\" y=\"356\" class=\"t name\">UI deployment + HPA</text>\n    <text x=\"866\" y=\"374\" class=\"small\">1–5 pods, CPU target 60%</text>\n    <text x=\"866\" y=\"391\" class=\"small\">serves dashboard and proxies</text>\n    <text x=\"866\" y=\"408\" class=\"small\">/api/* to the API service</text>\n    <rect x=\"866\" y=\"420\" width=\"66\" height=\"22\" class=\"chip\"/><text x=\"875\" y=\"436\" class=\"small\">ui-…</text>\n    <rect x=\"940\" y=\"420\" width=\"66\" height=\"22\" class=\"chip\"/><text x=\"949\" y=\"436\" class=\"small\">ui-…</text>\n    <rect x=\"1014\" y=\"420\" width=\"66\" height=\"22\" class=\"chip\"/><text x=\"1023\" y=\"436\" class=\"small\">ui-…</text>\n\n    <rect x=\"596\" y=\"330\" width=\"220\" height=\"126\" class=\"box\"/>\n    <text x=\"610\" y=\"356\" class=\"t name\">API deployment + HPA</text>\n    <text x=\"610\" y=\"374\" class=\"small\">1–5 pods, CPU target 60%</text>\n    <text x=\"610\" y=\"391\" class=\"small\">Kubernetes API reads and</text>\n    <text x=\"610\" y=\"408\" class=\"small\">scoped control actions</text>\n    <text x=\"610\" y=\"432\" class=\"mono\">/api/status, /work</text>\n\n    <rect x=\"316\" y=\"330\" width=\"242\" height=\"126\" class=\"box\"/>\n    <text x=\"330\" y=\"356\" class=\"t name\">Database StatefulSet</text>\n    <text x=\"330\" y=\"374\" class=\"small\">2 pods · ordered names · per-pod PVC</text>\n    <rect x=\"330\" y=\"386\" width=\"102\" height=\"24\" class=\"chip\"/><text x=\"338\" y=\"402\" class=\"small\">database-0 primary</text>\n    <rect x=\"440\" y=\"386\" width=\"102\" height=\"24\" class=\"chip\"/><text x=\"448\" y=\"402\" class=\"small\">database-1 replica</text>\n    <text x=\"330\" y=\"430\" class=\"small\">replica pulls every 2 s; API promotes</text>\n    <text x=\"330\" y=\"445\" class=\"small\">it when the primary fails</text>\n\n    <rect x=\"52\" y=\"330\" width=\"226\" height=\"126\" class=\"box\"/>\n    <text x=\"66\" y=\"356\" class=\"t name\">Host-persisted backups</text>\n    <text x=\"66\" y=\"376\" class=\"small\">shared PVC, local-path</text>\n    <text x=\"66\" y=\"394\" class=\"mono\">./kubernetes/data/k3s/storage</text>\n    <text x=\"66\" y=\"409\" class=\"mono\">→ landscape-shared PVC</text>\n    <text x=\"66\" y=\"423\" class=\"mono\">persisted on host</text>\n    <text x=\"66\" y=\"444\" class=\"small\">latest.json + 10 snapshots</text>\n  </g>\n\n  <path class=\"line\" d=\"M852,393 H820\"/>\n  <path class=\"line\" d=\"M596,393 H562\"/>\n  <path class=\"line\" d=\"M316,393 H282\"/>\n\n  <g>\n    <rect x=\"52\" y=\"556\" width=\"238\" height=\"88\" class=\"warn\"/>\n    <text x=\"66\" y=\"582\" class=\"t name\">Traffic generator</text>\n    <text x=\"66\" y=\"601\" class=\"small\">Deployment scaled 0–3 by the lab</text>\n    <text x=\"66\" y=\"618\" class=\"small\">4 workers per pod hit /work</text>\n    <text x=\"66\" y=\"635\" class=\"mono\">off · low · high</text>\n\n    <rect x=\"318\" y=\"556\" width=\"330\" height=\"88\" class=\"box\"/>\n    <text x=\"332\" y=\"582\" class=\"t name\">HorizontalPodAutoscalers</text>\n    <text x=\"332\" y=\"600\" class=\"small\">gateway 1–3 · loadbalancer 1–3 · cdn 1–3</text>\n    <text x=\"332\" y=\"616\" class=\"small\">ui 1–5 · api 1–5 (CPU utilisation)</text>\n    <text x=\"332\" y=\"633\" class=\"small\">metrics-server samples; scale-down is slow</text>\n\n    <rect x=\"676\" y=\"556\" width=\"470\" height=\"88\" class=\"box\"/>\n    <text x=\"690\" y=\"582\" class=\"t name\">Where the data lives on the host</text>\n    <text x=\"690\" y=\"601\" class=\"mono\">./kubernetes/data/k3s  → K3s state + local-path PVCs</text>\n    <text x=\"690\" y=\"618\" class=\"mono\">./kubernetes/data/k3s/storage → primary.json, backups/</text>\n    <text x=\"690\" y=\"635\" class=\"small\">delete the host directories and the lab starts empty</text>\n  </g>\n\n  <path class=\"dash\" d=\"M290,600 H305 V292 H439 V254\"/>\n  <text x=\"212\" y=\"540\" class=\"label\">drives the full chain</text>\n\n  <rect x=\"52\" y=\"676\" width=\"1094\" height=\"96\" fill=\"#eef5f1\" stroke=\"#b9cdc4\" stroke-width=\"1\" rx=\"6\"/>\n  <text x=\"68\" y=\"700\" class=\"t name\">NetworkPolicy segmentation (Ingress default-deny)</text>\n  <text x=\"68\" y=\"720\" class=\"small\">traefik + traffic → gateway → loadbalancer → cdn → ui → api → database (api and database peers) → shared backups PVC</text>\n  <text x=\"68\" y=\"741\" class=\"small\">No pod mounts a service-account token except the API, whose Role can only list workloads, watch events, delete database-0 and scale the traffic and database workloads.</text>\n  <text x=\"68\" y=\"760\" class=\"small\">Volumes: local-path PVCs per database pod for data, a shared PVC for the primary marker and backups. Nothing is stored in the container filesystem.</text>\n\n  <text x=\"55\" y=\"832\" class=\"label\">Request path: browser → Traefik → gateway → load balancer → CDN → UI → API → primary database. Replica promotes on failure; restore rolls back to the latest backup.</text>\n  <text x=\"55\" y=\"852\" class=\"label\">Practice: kubectl get all -n landscape-lab · kubectl get hpa -w · kubectl describe statefulset database · kubectl get pvc,pv</text>\n</svg>\n"

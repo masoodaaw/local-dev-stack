@@ -50,6 +50,15 @@ const groups = [
     { id: "init-cosmos-permissions", container: "init-cosmos-perms", name: "Cosmos DB permissions", note: "One-shot initialization; no web interface" },
     { id: "init-prom-wal", container: "init-prom-wal", name: "Prometheus WAL initialization", note: "One-shot initialization; no web interface" }
   ] }
+  ,
+  { name: "Kubernetes lab", icon: "hexagon", services: [
+    { id: "k8s-landscape", container: "k8s-k3s", name: "Kubernetes landscape", note: "K3s lab: gateway, load balancer, CDN, UI, API, database + DR", ports: [18080], links: [[18080, "/", "Open control room"], [18080, "/architecture.svg", "Architecture"]] },
+    { id: "k8s-gateway", container: "k8s-k3s", name: "Gateway stats", note: "Request rate, in-flight and p95 latency (JSON API)", ports: [18080], links: [[18080, "/_gateway/stats", "Gateway stats (API)"]] },
+    { id: "k8s-loadbalancer", container: "k8s-k3s", name: "Load balancer stats", note: "Round-robin distribution across CDN pods (JSON API)", ports: [18080], links: [[18080, "/_lb/stats", "LB stats (API)"]] },
+    { id: "k8s-cdn", container: "k8s-k3s", name: "CDN stats", note: "Cache hits, hit ratio and object count (JSON API)", ports: [18080], links: [[18080, "/_cdn/stats", "CDN stats (API)"]] },
+    { id: "k8s-status", container: "k8s-k3s", name: "Cluster status", note: "Pods, HPAs, metrics, events and database state (JSON API)", ports: [18080], links: [[18080, "/api/status", "Cluster status (API)"]] },
+    { id: "k8s-kubectl", container: "k8s-k3s", name: "kubectl access", note: "API server on 127.0.0.1:16443; run docker compose exec k3s kubectl", ports: [16443] }
+  ] }
 ];
 
 const hostname = location.hostname || "localhost";

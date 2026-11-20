@@ -1,0 +1,564 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: landscape-lab
+  labels:
+    app.kubernetes.io/part-of: landscape-lab
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames: ["database-0"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    resourceNames: ["traffic"]
+    verbs: ["patch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    resourceNames: ["database"]
+    verbs: ["patch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: landscape-controller
+  namespace: landscape-lab
+subjects:
+  - kind: ServiceAccount
+    name: landscape-controller
+    namespace: landscape-lab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: landscape-controller
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: landscape-lab
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: gateway}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+        - podSelector:
+            matchLabels: {app: traffic}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loadbalancer-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: loadbalancer}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: gateway}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cdn-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: cdn}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: loadbalancer}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: ui}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: cdn}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: ui}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-ingress
+  namespace: landscape-lab
+spec:
+  podSelector:
+    matchLabels: {app: database}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: api}
+        - podSelector:
+            matchLabels: {app: database}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: landscape-lab
+spec:
+  selector: {app: gateway}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+spec:
+  selector: {app: loadbalancer}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn
+  namespace: landscape-lab
+spec:
+  selector: {app: cdn}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdn-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: cdn}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+  namespace: landscape-lab
+spec:
+  selector: {app: ui}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: landscape-lab
+spec:
+  selector: {app: api}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: database}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: landscape-shared
+  namespace: landscape-lab
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: landscape
+  namespace: landscape-lab
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: {number: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: gateway}
+  template:
+    metadata:
+      labels: {app: gateway, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: gateway
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: gateway}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: loadbalancer}
+  template:
+    metadata:
+      labels: {app: loadbalancer, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: loadbalancer
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: loadbalancer}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdn
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: cdn}
+  template:
+    metadata:
+      labels: {app: cdn, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: cdn
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: cdn}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ui}
+  template:
+    metadata:
+      labels: {app: ui, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: ui
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: ui}]
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      serviceAccountName: landscape-controller
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: api
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env:
+            - {name: ROLE, value: api}
+            - {name: SHARED_DIR, value: /shared}
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
+          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: shared, mountPath: /shared, readOnly: true}
+      volumes:
+        - {name: app, configMap: {name: landscape-app}}
+        - name: shared
+          persistentVolumeClaim:
+            claimName: landscape-shared
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  replicas: 0
+  selector:
+    matchLabels: {app: traffic}
+  template:
+    metadata:
+      labels: {app: traffic, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: traffic
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env: [{name: ROLE, value: traffic}]
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 96Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
+      volumes: [{name: app, configMap: {name: landscape-app}}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  serviceName: database
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: database}
+  template:
+    metadata:
+      labels: {app: database, app.kubernetes.io/part-of: landscape-lab}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: database
+          image: node:22-alpine
+          command: ["node", "/app/app.js"]
+          env:
+            - {name: ROLE, value: database}
+            - {name: DATA_DIR, value: /data}
+            - {name: SHARED_DIR, value: /shared}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15}
+          resources: {requests: {cpu: 50m, memory: 48Mi}, limits: {cpu: 250m, memory: 96Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: data, mountPath: /data}
+            - {name: shared, mountPath: /shared}
+      volumes:
+        - {name: app, configMap: {name: landscape-app}}
+        - name: shared
+          persistentVolumeClaim:
+            claimName: landscape-shared
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: local-path
+        resources: {requests: {storage: 256Mi}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: gateway}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: loadbalancer
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: loadbalancer}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cdn
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: cdn}
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ui
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: ui}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: landscape-lab
+  labels: {app.kubernetes.io/part-of: landscape-lab}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: api}
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}

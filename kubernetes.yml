@@ -1,0 +1,23 @@
+name: kubernetes-lab
+
+services:
+  k3s:
+    image: rancher/k3s:v1.31.6-k3s1
+    privileged: true
+    restart: unless-stopped
+    command: server --write-kubeconfig-mode=600
+    ports:
+      - "127.0.0.1:16443:6443"
+      - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
+    volumes:
+      - ./kubernetes/data/k3s:/var/lib/rancher/k3s
+      - ./kubernetes/landscape.yaml:/var/lib/rancher/k3s/server/manifests/landscape.yaml:ro
+    networks:
+      - kubernetes-lab
+
+networks:
+  kubernetes-lab:
+    name: kubernetes-lab
+    ipam:
+      config:
+        - subnet: 172.31.240.0/24
