@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="940" viewBox="0 0 1400 940" role="img" aria-labelledby="title description">
+  <title id="title">Web apps stack architecture</title>
+  <desc id="description">Internet users reach the Nginx gateway through router port forwarding. The gateway serves the default application and HTTP-01 challenges. The dynv6 updater discovers the public IPv4 address and updates dynv6. The acme.sh certificate manager shares challenge and certificate storage with the gateway. Site one and site two are present but not routed by the current Nginx configuration.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#526277"/></marker>
+    <style>
+      text { font-family: 'Segoe UI', sans-serif; fill: #182638; }
+      .title { font-size: 38px; font-weight: 700; }
+      .heading { font-size: 21px; font-weight: 700; }
+      .body { font-size: 17px; }
+      .small { font-size: 15px; fill: #526277; }
+      .line { fill: none; stroke: #526277; stroke-width: 2; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 6 5; }
+      .box { fill: #fff; stroke: #b6c1ce; stroke-width: 2; }
+    </style>
+  </defs>
+  <rect width="1400" height="940" fill="#f5f7fa"/>
+  <rect width="1400" height="9" fill="#087f73"/>
+  <text x="50" y="65" class="title">Web Apps Stack</text>
+  <text x="50" y="95" class="small">Current Compose configuration · IPv4 dynamic DNS · HTTP-01 TLS</text>
+
+  <rect x="45" y="130" width="220" height="92" rx="8" class="box"/>
+  <text x="155" y="164" text-anchor="middle" class="heading">Internet clients</text>
+  <text x="155" y="194" text-anchor="middle" class="body">HTTP / HTTPS</text>
+  <rect x="335" y="130" width="245" height="92" rx="8" class="box"/>
+  <text x="457" y="164" text-anchor="middle" class="heading">Home router</text>
+  <text x="457" y="194" text-anchor="middle" class="body">Forward TCP 80 / 443</text>
+  <path d="M265 176 H332" class="line"/>
+
+  <rect x="805" y="130" width="215" height="92" rx="8" class="box"/>
+  <text x="912" y="164" text-anchor="middle" class="heading">dynv6</text>
+  <text x="912" y="194" text-anchor="middle" class="body">Public IPv4 record</text>
+  <rect x="1070" y="130" width="275" height="92" rx="8" class="box"/>
+  <text x="1207" y="164" text-anchor="middle" class="heading">Let's Encrypt</text>
+  <text x="1207" y="194" text-anchor="middle" class="body">HTTP-01 validation</text>
+
+  <rect x="45" y="270" width="1310" height="590" rx="10" fill="#fff" stroke="#b6c1ce" stroke-width="2"/>
+  <text x="75" y="305" class="heading">Docker host · web-apps Compose project</text>
+  <path d="M457 222 V320 H215 V392" class="line"/>
+
+  <rect x="75" y="340" width="565" height="320" rx="8" fill="#f2f8f7" stroke="#80bdb5" stroke-width="2"/>
+  <text x="100" y="372" class="heading">External Docker network: dev-network</text>
+  <rect x="100" y="395" width="230" height="105" rx="8" class="box"/>
+  <text x="215" y="427" text-anchor="middle" class="heading">nginx-gateway</text>
+  <text x="215" y="454" text-anchor="middle" class="small">Published ports 80 / 443</text>
+  <text x="215" y="477" text-anchor="middle" class="small">TLS + reverse proxy</text>
+  <rect x="385" y="395" width="225" height="105" rx="8" class="box"/>
+  <text x="497" y="427" text-anchor="middle" class="heading">default-app</text>
+  <text x="497" y="455" text-anchor="middle" class="small">Fallback site · port 80</text>
+  <text x="497" y="478" text-anchor="middle" class="small">Repository default-site</text>
+  <path d="M330 447 H382" class="line"/>
+  <rect x="100" y="540" width="230" height="85" rx="8" class="box"/>
+  <text x="215" y="574" text-anchor="middle" class="heading">site1-app × 2</text>
+  <text x="215" y="601" text-anchor="middle" class="small">Not routed yet</text>
+  <rect x="385" y="540" width="225" height="85" rx="8" class="box"/>
+  <text x="497" y="574" text-anchor="middle" class="heading">site2-app</text>
+  <text x="497" y="601" text-anchor="middle" class="small">Not routed yet</text>
+
+  <rect x="720" y="340" width="240" height="105" rx="8" class="box"/>
+  <text x="840" y="372" text-anchor="middle" class="heading">ddns-updater</text>
+  <text x="840" y="399" text-anchor="middle" class="small">ddclient · every 300s</text>
+  <text x="840" y="422" text-anchor="middle" class="small">Host /config bind · IPv4 lookup</text>
+  <path d="M860 340 V270 H912 V225" class="line"/>
+  <rect x="1030" y="340" width="270" height="105" rx="8" class="box"/>
+  <text x="1165" y="372" text-anchor="middle" class="heading">certbot (acme.sh)</text>
+  <text x="1165" y="399" text-anchor="middle" class="small">Issue / renew certificate</text>
+  <text x="1165" y="422" text-anchor="middle" class="small">Reload gateway on renewal</text>
+  <path d="M1165 340 V255 H1207 V225" class="line"/>
+  <text x="1035" y="475" class="small">Shares gateway PID namespace</text>
+  <path d="M1030 462 H980 V525 H675 V480 H333" class="line dashed"/>
+
+  <rect x="720" y="550" width="580" height="135" rx="8" fill="#f6f7fb" stroke="#b6c1ce" stroke-width="2"/>
+  <text x="745" y="581" class="heading">Shared host data</text>
+  <text x="745" y="612" class="body">certbot/www → HTTP-01 challenge files</text>
+  <text x="745" y="642" class="body">certbot/conf → certificates and ACME state</text>
+  <text x="745" y="669" class="small">Gateway mounts read-only; certificate manager writes</text>
+  <path d="M1165 445 V547" class="line"/>
+  <path d="M720 610 H675 V495 H333" class="line"/>
+
+  <text x="75" y="716" class="heading">Request flow</text>
+  <text x="75" y="746" class="body">Public DNS → router → gateway → default-app. HTTP-01 challenges use shared webroot; certified hosts redirect HTTP.</text>
+  <text x="75" y="781" class="small">Site 1 and site 2 are started by Compose but require Nginx server blocks before they receive requests.</text>
+  <text x="75" y="809" class="small">TLS hostnames and certificate paths are configured in the ignored .env file.</text>
+  <text x="75" y="837" class="small">Logs → Fluent Forward → Loki → Grafana. Docker health checks cover gateway and web containers.</text>
+  <text x="50" y="905" class="small">See WEB-APPS-HOWTO.md for configuration, DNS delegation, certificate setup and troubleshooting.</text>
+</svg>

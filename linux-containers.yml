@@ -22,6 +22,27 @@ x-logging: &default-logging
     tag: "{{.Name}}"
 
 services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    profiles:
+      - portainer
+    restart: always
+    network_mode: bridge
+    ports:
+      - "9443:9443"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/portainer
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
+
   # 1. Fixes host directory ownership before SonarQube boots
   init-sonar-permissions:
     image: alpine:latest
@@ -43,8 +64,13 @@ services:
         target: /opt/sonarqube/logs
         bind:
           create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-temp
+        target: /opt/sonarqube/temp
+        bind:
+          create_host_path: false
     command: >
-      chown -R 1000:1000 /opt/sonarqube/data /opt/sonarqube/extensions /opt/sonarqube/logs
+      chown -R 1000:1000 /opt/sonarqube/data /opt/sonarqube/extensions /opt/sonarqube/logs /opt/sonarqube/temp
       
   # Fixes host folder permissions & clears stale lock/socket files before Cosmos boots
   init-cosmos-permissions:
@@ -158,6 +184,11 @@ services:
         target: /data/db
         bind:
           create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/mongodb-configdb
+        target: /data/configdb
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -251,6 +282,11 @@ services:
         done
     volumes:
       - type: bind
+        source: ${DATA_DIR}/redis-audit-data
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${DATA_DIR}/redis-audit
         target: /var/log/audit/redis
         bind:
@@ -278,6 +314,11 @@ services:
           sleep 2
         done
     volumes:
+      - type: bind
+        source: ${DATA_DIR}/audit-log-permissions-data
+        target: /data
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/postgres
         target: /var/lib/postgresql/data
@@ -326,6 +367,11 @@ services:
       - type: bind
         source: ${DATA_DIR}/sonarqube-logs
         target: /opt/sonarqube/logs
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-temp
+        target: /opt/sonarqube/temp
         bind:
           create_host_path: false
     networks:
@@ -463,6 +509,21 @@ services:
         target: /tmp/kraft-combined-logs
         bind:
           create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-1-secrets
+        target: /etc/kafka/secrets
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-1-config
+        target: /mnt/shared/config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-1-data
+        target: /var/lib/kafka/data
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -493,6 +554,21 @@ services:
       - type: bind
         source: ${DATA_DIR}/kafka-2
         target: /tmp/kraft-combined-logs
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-2-secrets
+        target: /etc/kafka/secrets
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-2-config
+        target: /mnt/shared/config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kafka-2-data
+        target: /var/lib/kafka/data
         bind:
           create_host_path: false
     networks:
@@ -625,6 +701,12 @@ services:
     logging: *default-logging
     ports:
       - "16686:16686"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/jaeger-tmp
+        target: /tmp
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
