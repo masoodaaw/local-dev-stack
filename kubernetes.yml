@@ -4,7 +4,6 @@ services:
   k3s:
     image: rancher/k3s:v1.31.6-k3s1
     privileged: true
-    name: k3s
     restart: unless-stopped
     command: server --write-kubeconfig-mode=600
     ports:
