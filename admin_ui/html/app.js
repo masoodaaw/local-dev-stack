@@ -136,8 +136,9 @@ function render() {
     icon.setAttribute("aria-hidden", "true");
     heading.append(icon, element("h2", "", group.name), element("span", "section-count", String(matches.length)));
     section.append(heading);
+    const grid = element("div", "service-grid");
     for (const service of matches) {
-      const row = element("div", "service-row");
+      const row = element("article", "card service-card");
       row.dataset.service = service.id;
       const details = element("div", "");
       details.append(element("div", "service-name", service.name), element("div", "container-name", service.container), element("div", "service-note", service.note));
@@ -170,8 +171,9 @@ function render() {
       }
       if (!service.links) destinations.append(element("span", "endpoint-type", addresses.length ? "Client connection" : "Internal service"));
       row.append(details, endpoints, destinations);
-      section.append(row);
+      grid.append(row);
     }
+    section.append(grid);
     directory.append(section);
   }
   document.querySelector("#results").textContent = `${visibleCount} of ${services.length} services`;

@@ -26,8 +26,9 @@ h2 { font-size: 1.12rem; margin: 0; }
 .section-heading { display: flex; align-items: center; gap: .65rem; border-bottom: 2px solid var(--line); padding-bottom: .85rem; }
 .section-heading > i { color: var(--accent); }
 .section-count { color: var(--muted); font-size: .8rem; margin-left: auto; }
-.service-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1.1fr); align-items: center; gap: 1rem; padding: 1rem .5rem; border-bottom: 1px solid var(--line); }
-.service-row:hover { background: #ffffffa6; }
+.service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.service-card { display: flex; flex-direction: column; gap: .75rem; min-width: 0; padding: 1.1rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.service-card:hover { border-color: #b7ccc0; }
 .service-name { font-weight: 700; font-size: .95rem; }
 .container-name { font-family: monospace; color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
 .service-note { color: var(--muted); font-size: .83rem; margin-top: .2rem; }
@@ -35,17 +36,19 @@ h2 { font-size: 1.12rem; margin: 0; }
 .endpoint-line { display: flex; align-items: center; gap: .3rem; }
 .copy-button { border: 0; background: transparent; color: var(--muted); flex: 0 0 32px; width: 32px; height: 32px; border-radius: 4px; }
 .copy-button:hover, .copy-button:focus-visible { background: #e2ece6; color: var(--accent); }
-.destinations { display: flex; flex-wrap: wrap; gap: .4rem .8rem; justify-content: flex-end; }
+.destinations { display: flex; flex-wrap: wrap; gap: .4rem .8rem; margin-top: auto; }
 .destination { font-size: .85rem; color: #175c9a; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: .4rem; min-height: 36px; }
 .endpoint-type { color: var(--muted); font-size: .8rem; }
 .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 991px) {
+  .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 767px) {
   h1 { font-size: 1.65rem; }
   .brand { font-size: 1rem; }
   .host-label { max-width: 40%; font-size: .75rem; }
-  .service-row { grid-template-columns: minmax(0, 1fr); gap: .5rem; padding: 1rem 0; }
-  .destinations { justify-content: flex-start; }
+  .service-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: no-preference) {
   main { animation: arrive .25s ease-out; }
