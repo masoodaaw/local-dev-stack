@@ -11,8 +11,17 @@ services:
       - "127.0.0.1:16443:6443"
       - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
     volumes:
-      - ./kubernetes/data/k3s:/var/lib/rancher/k3s
-      - ./kubernetes/landscape.yaml:/var/lib/rancher/k3s/server/manifests/landscape.yaml:ro
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s
+        target: /var/lib/rancher/k3s
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./kubernetes/landscape.yaml
+        target: /var/lib/rancher/k3s/server/manifests/landscape.yaml
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - kubernetes-lab
 

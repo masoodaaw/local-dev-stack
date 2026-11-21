@@ -22,7 +22,13 @@ Every workload is a `StatefulSet` with `podManagementPolicy: Parallel`, so pods 
 
 ## Start on Linux
 
-From the repository root:
+The lab follows the same storage convention as the other Compose files: `DATA_DIR` comes from `.env`, and the bind mount refuses to create missing host paths. Create the state directory once:
+
+```sh
+mkdir -p "${DATA_DIR:?set DATA_DIR in .env}/kubernetes/k3s"
+```
+
+Then, from the repository root:
 
 ```sh
 docker compose -f kubernetes.yml up -d
@@ -43,10 +49,13 @@ The first start pulls `node:22-alpine` and the K3s component images, and it take
 All state is bind-mounted from the Linux host, the same idea as the bind mounts used by the other Compose files:
 
 ```text
-./kubernetes/data/k3s   -> /var/lib/rancher/k3s   (K3s state, containerd, local-path volumes)
+${DATA_DIR}/kubernetes/k3s   -> /var/lib/rancher/k3s                          (K3s state, containerd, local-path volumes)
+./kubernetes/landscape.yaml  -> /var/lib/rancher/k3s/server/manifests/landscape.yaml   (read-only, from the repo)
 ```
 
-The database pods use `volumeClaimTemplates` (one PVC per pod) and the shared `landscape-shared` PVC for the primary marker and backups. The local-path provisioner stores both under `./kubernetes/data/k3s/storage`, so `docker compose down` and `up` keep the counter, the replica data and the backups. Deleting `./kubernetes/data` is a full reset and cannot be undone.
+Both are declared with the long bind syntax and `create_host_path: false`, so a typo in `DATA_DIR` fails the start instead of silently writing to a new directory.
+
+The database pods use `volumeClaimTemplates` (one PVC per pod) and the shared `landscape-shared` PVC for the primary marker and backups. The local-path provisioner stores both under `${DATA_DIR}/kubernetes/k3s/storage`, so `docker compose down` and `up` keep the counter, the replica data and the backups. Deleting `${DATA_DIR}/kubernetes/k3s` is a full reset and cannot be undone.
 
 ## Simulation walkthrough
 
