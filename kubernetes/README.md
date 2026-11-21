@@ -179,6 +179,16 @@ docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get events --
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab logs statefulset/api --tail=50
 ```
 
+### Smoke test
+
+`kubernetes/smoke.sh` runs every live check in one read-only pass: compose service states, the bootstrap exit code, four Ready nodes, the control-plane taint, agent TLS errors, the `landscape-node-reader` ClusterRole, StatefulSet and HPA readiness, worker spread, the host bind directories, the dashboard on each worker ingress, the `/api/status` node payload, and both management UIs. It never scales, deletes or restarts anything.
+
+```sh
+bash kubernetes/smoke.sh
+```
+
+It prints one `PASS`/`FAIL`/`WARN` line per assertion and exits non-zero if anything fails. Override the published ports with `DASH_PORTS="18080 18081 18082"`, `HEADLAMP_PORT_NUM`, `KUBEWALL_PORT_NUM` or `STATUS_PORT` when they differ from the defaults.
+
 ## Development and offline checks
 
 Edit `resources.yaml` and the application assets, then regenerate the single deployed file and run the Node.js tests from the repository root:
