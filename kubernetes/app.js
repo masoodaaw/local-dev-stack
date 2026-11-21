@@ -376,7 +376,6 @@ async function collectStatus(clients = {}) {
   const apps = `/apis/apps/v1/namespaces/${namespace}`;
   const core = `/api/v1/namespaces/${namespace}`;
   const tasks = {
-    deployments: () => kubeClient(`${apps}/deployments?labelSelector=${label}`),
     statefulsets: () => kubeClient(`${apps}/statefulsets?labelSelector=${label}`),
     pods: () => kubeClient(`${core}/pods?labelSelector=${label}`),
     hpas: () => kubeClient(`/apis/autoscaling/v2/namespaces/${namespace}/horizontalpodautoscalers?labelSelector=${label}`),
@@ -417,7 +416,7 @@ const controls = {
       error.status = 400;
       throw error;
     }
-    await (clients.kube || kube)(`/apis/apps/v1/namespaces/${namespace}/deployments/traffic/scale`, 'PATCH', { spec: { replicas: data.level } });
+    await (clients.kube || kube)(`/apis/apps/v1/namespaces/${namespace}/statefulsets/traffic/scale`, 'PATCH', { spec: { replicas: data.level } });
     return { level: data.level };
   },
   '/api/database/increment': async (data, clients) => {

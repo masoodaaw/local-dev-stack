@@ -28,18 +28,11 @@ rules:
     resources: ["events"]
     verbs: ["list"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["list"]
-  - apiGroups: ["apps"]
-    resources: ["deployments/scale"]
-    resourceNames: ["traffic"]
-    verbs: ["patch"]
-  - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["list"]
   - apiGroups: ["apps"]
     resources: ["statefulsets/scale"]
-    resourceNames: ["database"]
+    resourceNames: ["database", "traffic"]
     verbs: ["patch"]
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
@@ -213,6 +206,55 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: gateway-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: gateway}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadbalancer-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: loadbalancer}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: ui}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: api}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traffic-headless
+  namespace: landscape-lab
+spec:
+  clusterIP: None
+  selector: {app: traffic}
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: ui
   namespace: landscape-lab
 spec:
@@ -268,13 +310,15 @@ spec:
                 port: {number: 8080}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: gateway
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: gateway-headless
   replicas: 1
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: gateway}
   template:
@@ -297,13 +341,15 @@ spec:
       volumes: [{name: app, configMap: {name: landscape-app}}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: loadbalancer
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: loadbalancer-headless
   replicas: 1
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: loadbalancer}
   template:
@@ -326,13 +372,15 @@ spec:
       volumes: [{name: app, configMap: {name: landscape-app}}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: cdn
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: cdn-headless
   replicas: 1
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: cdn}
   template:
@@ -355,13 +403,15 @@ spec:
       volumes: [{name: app, configMap: {name: landscape-app}}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: ui
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: ui-headless
   replicas: 1
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: ui}
   template:
@@ -384,13 +434,15 @@ spec:
       volumes: [{name: app, configMap: {name: landscape-app}}]
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: api
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: api-headless
   replicas: 1
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: api}
   template:
@@ -421,13 +473,15 @@ spec:
             claimName: landscape-shared
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: traffic
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
+  serviceName: traffic-headless
   replicas: 0
+  podManagementPolicy: Parallel
   selector:
     matchLabels: {app: traffic}
   template:
@@ -500,7 +554,7 @@ metadata:
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: gateway}
+  scaleTargetRef: {apiVersion: apps/v1, kind: StatefulSet, name: gateway}
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -514,7 +568,7 @@ metadata:
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: loadbalancer}
+  scaleTargetRef: {apiVersion: apps/v1, kind: StatefulSet, name: loadbalancer}
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -528,7 +582,7 @@ metadata:
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: cdn}
+  scaleTargetRef: {apiVersion: apps/v1, kind: StatefulSet, name: cdn}
   minReplicas: 1
   maxReplicas: 3
   metrics:
@@ -542,7 +596,7 @@ metadata:
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: ui}
+  scaleTargetRef: {apiVersion: apps/v1, kind: StatefulSet, name: ui}
   minReplicas: 1
   maxReplicas: 5
   metrics:
@@ -556,7 +610,7 @@ metadata:
   namespace: landscape-lab
   labels: {app.kubernetes.io/part-of: landscape-lab}
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: api}
+  scaleTargetRef: {apiVersion: apps/v1, kind: StatefulSet, name: api}
   minReplicas: 1
   maxReplicas: 5
   metrics:

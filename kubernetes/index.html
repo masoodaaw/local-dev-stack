@@ -56,12 +56,12 @@
 docker compose -f kubernetes.yml exec k3s kubectl get hpa -n landscape-lab -w
 docker compose -f kubernetes.yml exec k3s kubectl describe statefulset database -n landscape-lab
 docker compose -f kubernetes.yml exec k3s kubectl get pvc,pv -n landscape-lab
-docker compose -f kubernetes.yml exec k3s kubectl rollout status deployment/api -n landscape-lab
-docker compose -f kubernetes.yml exec k3s kubectl scale deployment/traffic -n landscape-lab --replicas=2
+docker compose -f kubernetes.yml exec k3s kubectl rollout status statefulset/api -n landscape-lab
+docker compose -f kubernetes.yml exec k3s kubectl scale statefulset/traffic -n landscape-lab --replicas=2
 docker compose -f kubernetes.yml exec k3s kubectl delete pod database-0 -n landscape-lab</pre>
       <p class="note">Open <a href="/architecture.svg">the architecture diagram</a> and read <code>kubernetes/CKA-STUDY-GUIDE.md</code> in the repository for exercises mapped to the CKA domains.</p>
     </section>
   </main>
-  <footer class="wrap">K3s · Traefik · Deployment + HPA · StatefulSet + PVC · NetworkPolicy · shared PVC backups</footer>
+  <footer class="wrap">K3s · Traefik · StatefulSet + HPA · stable pod names · NetworkPolicy · shared PVC backups</footer>
 </body>
 </html>

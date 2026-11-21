@@ -13,9 +13,9 @@ function row(values) {
   return result;
 }
 
-function replicaText(deployments, name) {
-  const deployment = deployments.find(item => item.metadata.name === name);
-  return deployment ? `${deployment.status.readyReplicas || 0} / ${deployment.spec.replicas}` : 'Unavailable';
+function replicaText(statefulsets, name) {
+  const workload = statefulsets.find(item => item.metadata.name === name);
+  return workload ? `${workload.status.readyReplicas || 0} / ${workload.spec.replicas}` : 'Unavailable';
 }
 
 function hpaCpu(hpas, name) {
@@ -28,7 +28,7 @@ function hpaCpu(hpas, name) {
 }
 
 function render(status) {
-  const deployments = status.deployments.data?.items || [];
+  const statefulsets = status.statefulsets.data?.items || [];
   const hpas = status.hpas.data?.items || [];
   const pods = status.pods.data?.items || [];
   const metrics = status.metrics.data?.items || [];
@@ -39,19 +39,19 @@ function render(status) {
 
   const distribution = (loadbalancer.distribution || []).map(item => `${item.pod}: ${item.requests}`).join(' · ') || 'No samples yet';
   element('components').replaceChildren(
-    row(['Gateway', replicaText(deployments, 'gateway'), gateway.requestsPerSecond ?? '—', gateway.inFlight ?? '—', `p95 ${gateway.latencyP95Ms ?? 0} ms`]),
-    row(['Load balancer', replicaText(deployments, 'loadbalancer'), loadbalancer.requestsPerSecond ?? '—', loadbalancer.inFlight ?? '—', distribution]),
-    row(['CDN', replicaText(deployments, 'cdn'), cdn.requestsPerSecond ?? '—', cdn.inFlight ?? '—', `${cdn.hitRatio ?? 0}% cache hit · ${cdn.entries ?? 0} objects`]),
-    row(['UI', replicaText(deployments, 'ui'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('ui-')).length} pod(s) reporting`]),
-    row(['API', replicaText(deployments, 'api'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('api-')).length} pod(s) reporting`])
+    row(['Gateway', replicaText(statefulsets, 'gateway'), gateway.requestsPerSecond ?? '—', gateway.inFlight ?? '—', `p95 ${gateway.latencyP95Ms ?? 0} ms`]),
+    row(['Load balancer', replicaText(statefulsets, 'loadbalancer'), loadbalancer.requestsPerSecond ?? '—', loadbalancer.inFlight ?? '—', distribution]),
+    row(['CDN', replicaText(statefulsets, 'cdn'), cdn.requestsPerSecond ?? '—', cdn.inFlight ?? '—', `${cdn.hitRatio ?? 0}% cache hit · ${cdn.entries ?? 0} objects`]),
+    row(['UI', replicaText(statefulsets, 'ui'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('ui-')).length} pod(s) reporting`]),
+    row(['API', replicaText(statefulsets, 'api'), '—', '—', `${pods.filter(pod => pod.metadata.name.startsWith('api-')).length} pod(s) reporting`])
   );
 
   element('workloads').replaceChildren(...['gateway', 'loadbalancer', 'cdn', 'ui', 'api'].map(name => {
     const cpu = hpaCpu(hpas, name);
-    return row([name.toUpperCase(), replicaText(deployments, name), cpu.target, cpu.current, cpu.range]);
+    return row([name.toUpperCase(), replicaText(statefulsets, name), cpu.target, cpu.current, cpu.range]);
   }));
 
-  const traffic = deployments.find(item => item.metadata.name === 'traffic');
+  const traffic = statefulsets.find(item => item.metadata.name === 'traffic');
   const level = traffic ? traffic.spec.replicas : 0;
   const labels = ['off', 'low', 'medium', 'high'];
   element('traffic-state').textContent = traffic

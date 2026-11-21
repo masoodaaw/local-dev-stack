@@ -9,16 +9,16 @@ Every request walks the same chain that a real edge platform uses, and each hop 
 | Layer | Kubernetes resource | What it demonstrates |
 | --- | --- | --- |
 | Entry | Traefik `Ingress` (`ingressClassName: traefik`) | K3s bundled ingress controller, no TLS or auth |
-| Gateway | `Deployment` gateway + HPA 1–3 | request counter, in-flight requests, p95 latency |
-| Load balancer | `Deployment` loadbalancer + HPA 1–3 | round-robin across CDN **pod IPs** resolved from a headless Service with DNS SRV, per-pod distribution |
-| CDN | `Deployment` cdn + HPA 1–3 | 15 s GET cache, hit ratio, bytes saved |
-| UI | `Deployment` ui + HPA 1–5 | serves the control room, proxies `/api/*` |
-| API | `Deployment` api + HPA 1–5, dedicated ServiceAccount | reads cluster state, runs scoped control actions |
+| Gateway | `StatefulSet` gateway + HPA 1–3 | request counter, in-flight requests, p95 latency |
+| Load balancer | `StatefulSet` loadbalancer + HPA 1–3 | round-robin across CDN **pod IPs** resolved from a headless Service with DNS SRV, per-pod distribution |
+| CDN | `StatefulSet` cdn + HPA 1–3 | 15 s GET cache, hit ratio, bytes saved |
+| UI | `StatefulSet` ui + HPA 1–5 | serves the control room, proxies `/api/*` |
+| API | `StatefulSet` api + HPA 1–5, dedicated ServiceAccount | reads cluster state, runs scoped control actions |
 | Database | `StatefulSet` database, 2 pods, `volumeClaimTemplates` | primary + replica, ordered pod names, per-pod PVC |
 | Shared state | `PersistentVolumeClaim` landscape-shared | primary marker and rotating backups, mounted by database and API pods |
-| Traffic | `Deployment` traffic, scaled 0–3 | bounded CPU load generator through the full chain |
+| Traffic | `StatefulSet` traffic, scaled 0–3 | bounded CPU load generator through the full chain |
 
-Namespace quotas are not used, but **NetworkPolicies** default-deny ingress and only allow Traefik and the traffic generator into the gateway, gateway into the load balancer, load balancer into the CDN, CDN into the UI, UI into the API, and API/database peers into the database.
+Every workload is a `StatefulSet` with `podManagementPolicy: Parallel`, so pods keep stable, readable names (`gateway-0`, `loadbalancer-1`, `cdn-0`, `ui-2`, `api-0`, `database-1`) across restarts, and a headless Service gives each one a DNS name such as `api-0.api-headless`. Namespace quotas are not used, but **NetworkPolicies** default-deny ingress and only allow Traefik and the traffic generator into the gateway, gateway into the load balancer, load balancer into the CDN, CDN into the UI, UI into the API, and API/database peers into the database.
 
 ## Start on Linux
 
@@ -53,7 +53,7 @@ The database pods use `volumeClaimTemplates` (one PVC per pod) and the shared `l
 ### 1. Autoscaling from traffic
 
 1. Open the control room and leave the **autoscaling** table visible.
-2. Press **Low load**. The traffic Deployment scales to 1 pod (4 workers); watch the API and UI HPAs move from 1 to 2–3 pods within roughly 30–90 seconds.
+2. Press **Low load**. The traffic StatefulSet scales to 1 pod (4 workers); watch the API and UI HPAs move from 1 to 2–3 pods within roughly 30–90 seconds.
 3. Press **High load**. Traffic goes to 3 pods and UI/API can reach their 5-pod maximum.
 4. Press **Off**. CPU falls, but Kubernetes deliberately waits (default 300 s stabilisation window) before scaling down, so pods linger for several minutes. That delay is a real behaviour worth recognising.
 5. Watch it from a terminal: `docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get hpa -w`.
@@ -82,10 +82,10 @@ The **Component usage** table shows requests/sec, in-flight requests, p95 latenc
 ### 5. Rolling updates and rollback practice
 
 ```sh
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout restart deployment/api
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout status deployment/api
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab set image deployment/ui ui=node:22-alpine
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout undo deployment/ui
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout restart statefulset/api
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout status statefulset/api
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab set image statefulset/ui ui=node:22-alpine
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab rollout undo statefulset/ui
 ```
 
 Changing the ConfigMap does not restart Node processes by itself; after applying a new manifest, restart the affected workloads with a normal rollout.
@@ -111,18 +111,18 @@ Mutations require `Content-Type: application/json` and a matching loopback `Orig
 
 ## Security and isolation
 
-Only API pods receive the `landscape-controller` service-account token. Its namespace Role can list pods, Deployments, StatefulSets, HPAs and pod metrics, list events, delete `database-0`, and patch the scale of the `traffic` Deployment and the `database` StatefulSet. It cannot read Secrets or change other workloads. No kubeconfig, cluster-admin token or secret is exposed to the browser.
+Only API pods receive the `landscape-controller` service-account token. Its namespace Role can list pods, StatefulSets, HPAs and pod metrics, list events, delete `database-0`, and patch the scale of the `traffic` StatefulSet and the `database` StatefulSet. It cannot read Secrets or change other workloads. No kubeconfig, cluster-admin token or secret is exposed to the browser.
 
 NetworkPolicies isolate the layers inside the namespace, and the whole cluster lives on the dedicated `kubernetes-lab` Docker network. Egress is not restricted; the host and cluster administrators remain trusted.
 
 ## Inspection on the Linux host
 
 ```sh
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get deployments,statefulsets,pods,hpa,svc,pvc
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get statefulsets,pods,hpa,svc,pvc
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab top pods
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab describe hpa ui
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get events --sort-by=.lastTimestamp
-docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab logs deployment/api --tail=50
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab logs statefulset/api --tail=50
 ```
 
 ## Development and offline checks

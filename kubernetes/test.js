@@ -54,7 +54,7 @@ test('traffic levels validate and patch only the traffic scale', async () => {
   assert.equal((await invoke('/api/traffic', { level: 2 }, clients)).status, 200);
   assert.equal((await invoke('/api/traffic', { level: 9 }, clients)).status, 400);
   assert.equal((await invoke('/api/traffic', { level: '1' }, clients)).status, 400);
-  assert.deepEqual(calls[0], ['/apis/apps/v1/namespaces/landscape-lab/deployments/traffic/scale', 'PATCH', { spec: { replicas: 2 } }]);
+  assert.deepEqual(calls[0], ['/apis/apps/v1/namespaces/landscape-lab/statefulsets/traffic/scale', 'PATCH', { spec: { replicas: 2 } }]);
   assert.equal(calls.length, 1);
   const scaled = await invoke('/api/database/scale', { replicas: 0 }, clients);
   assert.equal(scaled.status, 200);
@@ -107,20 +107,29 @@ test('generated manifest embeds exact assets and the full landscape', () => {
     assert.ok(line, `Missing ConfigMap asset ${file}`);
     assert.equal(JSON.parse(line.slice(line.indexOf(': ') + 2)), fs.readFileSync(source, 'utf8'));
   }
-  assert.equal((manifest.match(/^kind: Deployment$/gm) || []).length, 6);
-  assert.equal((manifest.match(/^kind: StatefulSet$/gm) || []).length, 1);
+  assert.equal((manifest.match(/^kind: Deployment$/gm) || []).length, 0);
+  assert.equal((manifest.match(/^kind: StatefulSet$/gm) || []).length, 7);
   assert.equal((manifest.match(/^kind: HorizontalPodAutoscaler$/gm) || []).length, 5);
   assert.equal((manifest.match(/^kind: NetworkPolicy$/gm) || []).length, 7);
-  assert.equal((manifest.match(/^kind: Service$/gm) || []).length, 7);
+  assert.equal((manifest.match(/^kind: Service$/gm) || []).length, 12);
   assert.equal((manifest.match(/^kind: Ingress$/gm) || []).length, 1);
   assert.match(manifest, /kind: Ingress[\s\S]*?name: gateway[\s\S]*?number: 8080/);
   assert.match(manifest, /resourceNames: \["database-0"\]\s+verbs: \["delete"\]/);
-  assert.match(manifest, /resources: \["statefulsets\/scale"\]\s+resourceNames: \["database"\]\s+verbs: \["patch"\]/);
+  assert.match(manifest, /resources: \["statefulsets\/scale"\]\s+resourceNames: \["database", "traffic"\]\s+verbs: \["patch"\]/);
   assert.match(manifest, /kind: StatefulSet[\s\S]*?replicas: 2[\s\S]*?storageClassName: local-path/);
   assert.match(manifest, /kind: PersistentVolumeClaim[\s\S]*?name: landscape-shared[\s\S]*?storageClassName: local-path/);
   assert.match(manifest, /claimName: landscape-shared/);
   assert.doesNotMatch(manifest, /hostPath/);
   assert.match(manifest, /name: cdn-headless[\s\S]*?clusterIP: None/);
+  const NL = String.fromCharCode(10);
+  const lf = manifest.split(String.fromCharCode(13) + NL).join(NL);
+  for (const name of ['gateway', 'loadbalancer', 'cdn', 'ui', 'api', 'traffic']) {
+    const begin = lf.indexOf('kind: StatefulSet' + NL + 'metadata:' + NL + '  name: ' + name + NL);
+    assert.ok(begin >= 0, 'Missing StatefulSet ' + name);
+    const block = lf.slice(begin, lf.indexOf(NL + '---', begin));
+    assert.ok(block.includes('serviceName: ' + name + '-headless'), name + ' serviceName');
+    assert.ok(block.includes('podManagementPolicy: Parallel'), name + ' podManagementPolicy');
+  }
   assert.doesNotMatch(manifest, /kind: ClusterRole(?:Binding)?\b/);
   assert.doesNotMatch(manifest, /hostNetwork: true/);
 });

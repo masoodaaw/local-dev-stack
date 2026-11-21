@@ -4,8 +4,9 @@ services:
   k3s:
     image: rancher/k3s:v1.31.6-k3s1
     privileged: true
+    hostname: k3s
     restart: unless-stopped
-    command: server --write-kubeconfig-mode=600
+    command: server --write-kubeconfig-mode=600 --node-name=k3s
     ports:
       - "127.0.0.1:16443:6443"
       - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"

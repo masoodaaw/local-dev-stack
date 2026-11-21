@@ -18,7 +18,7 @@ This single-node K3s cluster is excellent for the workload, networking, storage,
 
 | CKA topic | Where it lives here |
 | --- | --- |
-| Deployments, probes, resource requests/limits | `gateway`, `loadbalancer`, `cdn`, `ui`, `api`, `traffic` |
+| StatefulSets, probes, resource requests/limits | `gateway`, `loadbalancer`, `cdn`, `ui`, `api`, `traffic` |
 | StatefulSet, ordered identity, per-pod PVC | `database` (2 pods, `volumeClaimTemplates`) |
 | HorizontalPodAutoscaler and metrics-server | five HPAs driving pod counts from live CPU |
 | Service types, headless Service, DNS SRV | `cdn-headless`, `database` (headless), `ui`, `api` |
@@ -60,10 +60,10 @@ kubectl get pods --field-selector=status.phase!=Running -A
 kubectl explain deployment.spec.strategy --recursive | head -40
 
 # operate
-kubectl scale deployment/api --replicas=3
-kubectl set image deployment/ui ui=node:22-alpine --record
-kubectl rollout status deployment/ui
-kubectl rollout undo deployment/ui --to-revision=1
+kubectl scale statefulset/api --replicas=3
+kubectl set image statefulset/ui ui=node:22-alpine
+kubectl rollout status statefulset/ui
+kubectl rollout undo statefulset/ui --to-revision=1
 kubectl exec -it pod -- sh
 kubectl run tmp --rm -it --image=busybox --restart=Never -- sh
 kubectl debug pod/api-xxxx --image=busybox -it --target=api
@@ -90,7 +90,7 @@ K() { docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab "$@"; }
 
 ### Workloads & scheduling (15%)
 
-1. Scale `api` to 4 pods, then back to 1. `K scale deployment/api --replicas=4`.
+1. Scale `api` to 4 pods, then back to 1. `K scale statefulset/api --replicas=4`.
 2. Set a rolling-update strategy with `maxSurge: 1`, `maxUnavailable: 0` and confirm pods are replaced one at a time.
 3. Break a readiness probe on purpose (`path: /nope`), watch the Pod stay `Running` but never `Ready`, and see the Service endpoints drop it. Then fix it.
 4. Change `ui`'s CPU request to `250m` and watch the HPA target percentage change behaviour.
