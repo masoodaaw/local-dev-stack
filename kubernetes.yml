@@ -81,12 +81,6 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${DATA_DIR}/kubernetes/kube
-        target: /kubeconfig
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1
         target: /var/lib/rancher/k3s
         bind:
@@ -127,12 +121,6 @@ services:
       - type: bind
         source: ./kubernetes/agent-entrypoint.sh
         target: /agent-entrypoint.sh
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${DATA_DIR}/kubernetes/kube
-        target: /kubeconfig
         read_only: true
         bind:
           create_host_path: false
@@ -181,12 +169,6 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${DATA_DIR}/kubernetes/kube
-        target: /kubeconfig
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3
         target: /var/lib/rancher/k3s
         bind:
@@ -218,8 +200,8 @@ services:
           create_host_path: false
   lab-bootstrap:
     container_name: kubernetes-lab-bootstrap
-    image: alpine:3.20.3
-    network_mode: none
+    image: rancher/k3s:v1.31.6-k3s1
+    entrypoint: ["/bin/sh", "-c"]
     depends_on:
       k3s:
         condition: service_started
@@ -240,15 +222,36 @@ services:
         read_only: true
         bind:
           create_host_path: false
+    networks:
+      - kubernetes-lab
     command:
-      - sh
-      - -c
       - |
         set -e
         chown 1000:1000 /shared || true
-        timeout 300 sh -c 'until grep -q client-key-data /k3s-config/k3s.yaml 2>/dev/null; do sleep 2; done'
+        i=0
+        while [ "$$i" -lt 150 ]; do
+          if grep -q client-key-data /k3s-config/k3s.yaml 2>/dev/null; then
+            break
+          fi
+          i=$$((i + 1))
+          sleep 2
+        done
+        grep -q client-key-data /k3s-config/k3s.yaml
         sed 's#https://127.0.0.1:6443#https://k3s:6443#' /k3s-config/k3s.yaml > /kube/config
         chmod 600 /kube/config
+        export KUBECONFIG=/kube/config
+        i=0
+        while [ "$$i" -lt 60 ]; do
+          if /bin/k3s kubectl --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
+            break
+          fi
+          i=$$((i + 1))
+          sleep 2
+        done
+        for n in k3s-agent-1 k3s-agent-2 k3s-agent-3; do
+          /bin/k3s kubectl delete secret -n kube-system "$${n}.node-password.k3s" --ignore-not-found=true
+          echo "bootstrap: cleared $${n}.node-password.k3s (if present)"
+        done
         echo "bootstrap: wrote /kube/config and prepared /shared"
 
   headlamp:
