@@ -58,7 +58,9 @@ The first start pulls four K3s containers, `node:22-alpine` for the workloads, a
 | `k3s-agent-2` | `k3s-agent-2` | worker |
 | `k3s-agent-3` | `k3s-agent-3` | worker |
 
-Agents join with `K3S_URL=https://k3s:6443` and a shared `K3S_LAB_TOKEN` (defaults to a fixed lab token in `kubernetes.yml`; set `K3S_LAB_TOKEN` in `.env` to change it). The server certificate carries `--tls-san=k3s`, so agents verify it by name. The control plane is tainted and every workload carries a `topologySpreadConstraints` rule on `kubernetes.io/hostname`, so HPA replicas (up to 5 for `ui`/`api`) spread across the three workers.
+Every service pins its container name, so `docker ps` shows fixed names instead of generated `<project>-<service>-1` ones: `kubernetes-lab-k3s`, `kubernetes-lab-k3s-agent-1`, `kubernetes-lab-k3s-agent-2`, `kubernetes-lab-k3s-agent-3`, `kubernetes-lab-bootstrap`, `kubernetes-lab-headlamp`, `kubernetes-lab-kubewall`. The lab pods keep their StatefulSet ordinal names (`gateway-0`, `ui-0`, `api-0`, `database-0`, `database-1`, ...); only the K3s add-ons (`coredns-*`, `traefik-*`, `svclb-traefik-*`, `metrics-server-*`, `local-path-provisioner-*`) carry controller-generated suffixes, and those cannot be renamed.
+
+Agents join with `K3S_URL=https://k3s:6443` and a shared `K3S_LAB_TOKEN` (defaults to a fixed lab token in `kubernetes.yml`; set `K3S_LAB_TOKEN` in `.env` to change it). The server certificate carries `--tls-san=k3s`, so agents verify it by name. The control plane is tainted and every workload carries a `topologySpreadConstraints` rule on `kubernetes.io/hostname` that matches the shared `app.kubernetes.io/part-of: landscape-lab` label, so the seven lab pods and their HPA replicas (up to 5 for `ui`/`api`) spread across the three workers.
 
 `kubectl` runs inside the server container; it is the only service that publishes the API:
 

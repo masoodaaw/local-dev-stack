@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Read-only smoke test for the kubernetes.yml lab.
 #
 # Run from the repository root on the machine that runs the stack:
@@ -69,6 +69,16 @@ if [ -n "$boot_id" ]; then
   fi
 else
   bad "lab-bootstrap container missing"
+fi
+
+expected_names="kubernetes-lab-bootstrap kubernetes-lab-headlamp kubernetes-lab-k3s kubernetes-lab-k3s-agent-1 kubernetes-lab-k3s-agent-2 kubernetes-lab-k3s-agent-3 kubernetes-lab-kubewall"
+actual_names="$("${COMPOSE[@]}" ps -a --format '{{.Name}}' 2>/dev/null | sed '/^$/d' | sort)"
+if [ "$actual_names" = "$(printf '%s
+' $expected_names | sort)" ]; then
+  ok "all 7 containers use their pinned names"
+else
+  bad "container names are not the pinned ones"
+  detail "got: $(printf '%s ' $actual_names)"
 fi
 
 hdr "Cluster nodes"

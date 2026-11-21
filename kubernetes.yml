@@ -22,6 +22,7 @@ x-k3s-agent: &k3s-agent
 
 services:
   k3s:
+    container_name: kubernetes-lab-k3s
     <<: *k3s-base
     hostname: k3s
     command: >-
@@ -55,6 +56,7 @@ services:
       - kubernetes-lab
 
   k3s-agent-1:
+    container_name: kubernetes-lab-k3s-agent-1
     <<: *k3s-agent
     hostname: k3s-agent-1
     command: agent --node-name=k3s-agent-1
@@ -77,6 +79,7 @@ services:
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
   k3s-agent-2:
+    container_name: kubernetes-lab-k3s-agent-2
     <<: *k3s-agent
     hostname: k3s-agent-2
     command: agent --node-name=k3s-agent-2
@@ -99,6 +102,7 @@ services:
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
   k3s-agent-3:
+    container_name: kubernetes-lab-k3s-agent-3
     <<: *k3s-agent
     hostname: k3s-agent-3
     command: agent --node-name=k3s-agent-3
@@ -121,6 +125,7 @@ services:
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
   lab-bootstrap:
+    container_name: kubernetes-lab-bootstrap
     image: alpine:3.20.3
     network_mode: none
     depends_on:
@@ -149,6 +154,7 @@ services:
         echo "bootstrap: wrote /kube/config and prepared /shared"
 
   headlamp:
+    container_name: kubernetes-lab-headlamp
     image: ghcr.io/headlamp-k8s/headlamp:v0.46.0
     user: "0:0"
     restart: unless-stopped
@@ -167,6 +173,7 @@ services:
       - kubernetes-lab
 
   kubewall:
+    container_name: kubernetes-lab-kubewall
     image: ghcr.io/kubewall/kubewall:0.0.23
     user: "0:0"
     restart: unless-stopped

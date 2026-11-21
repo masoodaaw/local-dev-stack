@@ -341,7 +341,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: gateway}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: gateway
           image: node:22-alpine
@@ -377,7 +377,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: loadbalancer}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: loadbalancer
           image: node:22-alpine
@@ -413,7 +413,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: cdn}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: cdn
           image: node:22-alpine
@@ -449,7 +449,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: ui}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: ui
           image: node:22-alpine
@@ -485,7 +485,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: api}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: api
           image: node:22-alpine
@@ -528,7 +528,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: traffic}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: traffic
           image: node:22-alpine
@@ -561,7 +561,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector: {matchLabels: {app: database}}
+          labelSelector: {matchLabels: {app.kubernetes.io/part-of: landscape-lab}}
       containers:
         - name: database
           image: node:22-alpine

@@ -22,7 +22,7 @@
 
     <section class="section">
       <div class="section-title"><div><div class="eyebrow">CLUSTER</div><h2>Topology</h2></div></div>
-      <p class="muted">One control-plane node and three workers. The control plane carries <code>k3s.io/lab-control-plane=true:NoSchedule</code>, so every lab pod runs on a worker; every workload has a hostname topology spread constraint so HPA scale-ups land on all three.</p>
+      <p class="muted">One control-plane node and three workers. The control plane carries <code>k3s.io/lab-control-plane=true:NoSchedule</code>, so every lab pod runs on a worker; all lab pods share one hostname topology spread constraint, so the seven pods and their HPA scale-ups land on all three.</p>
       <div class="table-wrap"><table><thead><tr><th>Node</th><th>Roles</th><th>Taints</th><th>Lab pods</th><th>Placement</th></tr></thead><tbody id="nodes"></tbody></table></div>
     </section>
 

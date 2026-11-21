@@ -141,11 +141,11 @@ ETCDCTL_API=3 etcdctl snapshot status /tmp/etcd.db --write-out=table
 
 ## Multi-node drills
 
-One control plane (`k3s-server`, tainted) and three workers (`k3s-agent-1..3`). All lab pods run on the workers; each workload spreads replicas by hostname.
+One control plane (`k3s-server`, tainted) and three workers (`k3s-agent-1..3`). All lab pods run on the workers; a shared hostname spread rule balances the seven pods and every replica across the three workers.
 
 1. **Cordon and drain.** `K cordon k3s-agent-3`, then `K drain k3s-agent-3 --ignore-daemonsets --delete-emptydir-data`, watch replicas reschedule to the other workers, then `K uncordon k3s-agent-3`.
 2. **Taint and tolerate.** Add `learning=blocked:NoSchedule` to `k3s-agent-2`, create a Pod without a toleration, read the `FailedScheduling` event, then add the toleration and reschedule.
-3. **Spread.** Scale `ui` to 3 and confirm `K get pods -o wide` reports one pod per worker.
+3. **Spread.** Scale `ui` to 3 and confirm `K get pods -o wide` keeps the lab pods balanced across the workers (skew at most one pod per worker).
 4. **Node failure.** `docker compose stop k3s-agent-2`, watch its pods go `Unknown` and be recreated, then `docker compose start k3s-agent-2` and confirm `K get nodes` returns it to `Ready`.
 5. **Control-plane isolation.** `K describe node k3s-server | grep -A3 Taints` explains why no lab pod runs there.
 6. **Placement debugging.** `K describe pod <ui pod>` and read `Node-Selectors`, `Tolerations` and the scheduling events.
