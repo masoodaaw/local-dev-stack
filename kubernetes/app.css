@@ -50,3 +50,7 @@ tr:hover td { background: #f0f5f2; }
 code { background: #e7efea; padding: 1px 5px; border-radius: 3px; font-size: .92em; }
 a { color: #175c9a; }
 footer { padding: 26px 0 34px; color: #6b7f79; font-size: 12px; }
+
+.actions a.button { display: inline-block; border: 1px solid #164d42; background: #164d42; color: white; border-radius: 4px; padding: 10px 15px; font: 600 13px 'Trebuchet MS', sans-serif; text-decoration: none; }
+.actions a.button:hover { background: #236957; }
+.actions a.button.secondary { color: #164d42; background: transparent; }

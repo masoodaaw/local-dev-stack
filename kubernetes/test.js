@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { isSameOriginMutation, isLabPod } = require('./security');
-const { createDatabaseHandler, apiHandler } = require('./app');
+const { createDatabaseHandler, apiHandler, collectStatus } = require('./app');
 const { build } = require('./build');
 
 function response() {
@@ -41,7 +41,7 @@ test('control routes reject cross-origin requests and unknown operations', async
   await apiHandler({ method: 'POST', url: '/api/database/failover', headers: { host: 'localhost:18080', origin: 'http://evil.test', 'content-type': 'application/json' } }, forbidden);
   assert.equal(forbidden.status, 403);
   const unknown = response();
-  await apiHandler({ method: 'POST', url: '/api/deployments/other', headers: {} }, unknown);
+  await apiHandler({ method: 'POST', url: '/api/not-a-control', headers: {} }, unknown);
   assert.equal(unknown.status, 404);
 });
 
@@ -95,6 +95,38 @@ test('database primary/replica lifecycle, backup and restore', () => {
   }
 });
 
+test('status payload describes nodes with roles, taints and lab pod counts', async () => {
+  const clients = {
+    kube: async target => {
+      if (target === '/api/v1/nodes') {
+        return { items: [
+          { metadata: { name: 'k3s-server', labels: { 'node-role.kubernetes.io/control-plane': '' } }, spec: { taints: [{ key: 'k3s.io/lab-control-plane', value: 'true', effect: 'NoSchedule' }] } },
+          { metadata: { name: 'k3s-agent-1', labels: {} }, spec: {} },
+          { metadata: { name: 'k3s-agent-2', labels: {} }, spec: { unschedulable: true } }
+        ] };
+      }
+      if (target.startsWith('/api/v1/namespaces/landscape-lab/pods?')) {
+        return { items: [
+          { metadata: { name: 'api-0' }, spec: { nodeName: 'k3s-agent-1' } },
+          { metadata: { name: 'database-0' }, spec: { nodeName: 'k3s-agent-1' } },
+          { metadata: { name: 'noise-0' }, spec: { nodeName: 'k3s-agent-1' } }
+        ] };
+      }
+      throw new Error('not available');
+    },
+    internal: async () => { throw new Error('not available'); }
+  };
+  const status = await collectStatus(clients);
+  assert.deepEqual(
+    status.nodes.data.items.map(node => [node.name, node.roles, node.taints, node.podCount, node.unschedulable]),
+    [
+      ['k3s-server', ['control-plane'], [{ key: 'k3s.io/lab-control-plane', value: 'true', effect: 'NoSchedule' }], 0, false],
+      ['k3s-agent-1', [], [], 2, false],
+      ['k3s-agent-2', [], [], 0, true]
+    ]
+  );
+});
+
 test('generated manifest embeds exact assets and the full landscape', () => {
   const manifest = fs.readFileSync(path.join(__dirname, 'landscape.yaml'), 'utf8');
   assert.equal(manifest, build(), 'Run node kubernetes/build.js after changing a source file');
@@ -117,9 +149,9 @@ test('generated manifest embeds exact assets and the full landscape', () => {
   assert.match(manifest, /resourceNames: \["database-0"\]\s+verbs: \["delete"\]/);
   assert.match(manifest, /resources: \["statefulsets\/scale"\]\s+resourceNames: \["database", "traffic"\]\s+verbs: \["patch"\]/);
   assert.match(manifest, /kind: StatefulSet[\s\S]*?replicas: 2[\s\S]*?storageClassName: local-path/);
-  assert.match(manifest, /kind: PersistentVolumeClaim[\s\S]*?name: landscape-shared[\s\S]*?storageClassName: local-path/);
-  assert.match(manifest, /claimName: landscape-shared/);
-  assert.doesNotMatch(manifest, /hostPath/);
+  assert.doesNotMatch(manifest, /claimName: landscape-shared/);
+  assert.equal((manifest.match(/path: \/shared, type: Directory/g) || []).length, 2);
+  assert.equal((manifest.match(/topologyKey: kubernetes\.io\/hostname/g) || []).length, 7);
   assert.match(manifest, /name: cdn-headless[\s\S]*?clusterIP: None/);
   const NL = String.fromCharCode(10);
   const lf = manifest.split(String.fromCharCode(13) + NL).join(NL);
@@ -130,6 +162,9 @@ test('generated manifest embeds exact assets and the full landscape', () => {
     assert.ok(block.includes('serviceName: ' + name + '-headless'), name + ' serviceName');
     assert.ok(block.includes('podManagementPolicy: Parallel'), name + ' podManagementPolicy');
   }
-  assert.doesNotMatch(manifest, /kind: ClusterRole(?:Binding)?\b/);
+  assert.equal((manifest.match(/^kind: ClusterRole$/gm) || []).length, 1);
+  assert.equal((manifest.match(/^kind: ClusterRoleBinding$/gm) || []).length, 1);
+  assert.match(manifest, /kind: ClusterRole\b[\s\S]*?resources: \["nodes"\]\s+verbs: \["get", "list"\]/);
+  assert.doesNotMatch(manifest, /resources: \["(?:secrets|pods\/exec|nodes\/proxy)"\]/);
   assert.doesNotMatch(manifest, /hostNetwork: true/);
 });

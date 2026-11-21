@@ -37,6 +37,36 @@ function render(status) {
   const cdn = status.cdn.data || {};
   const database = status.database.data || {};
 
+  const podsByNode = new Map();
+  for (const pod of pods) {
+    const node = pod.spec?.nodeName || 'unscheduled';
+    if (!podsByNode.has(node)) podsByNode.set(node, []);
+    podsByNode.get(node).push(pod.metadata.name);
+  }
+  const nodes = status.nodes?.data?.items || [];
+  const isControlPlane = node => (node.roles || []).some(role => role === 'control-plane' || role === 'master');
+  const placement = nodes.length
+    ? [...nodes].sort((left, right) => Number(isControlPlane(right)) - Number(isControlPlane(left)) || left.name.localeCompare(right.name)).map(node => {
+      const names = podsByNode.get(node.name) || [];
+      const roles = node.roles?.length ? node.roles.join(', ') : 'worker';
+      const taints = (node.taints || []).map(taint => `${taint.key}${taint.value ? `=${taint.value}` : ''}:${taint.effect}`).join(', ');
+      return [
+        node.name,
+        node.unschedulable ? `${roles} (cordoned)` : roles,
+        taints || '—',
+        node.podCount == null ? '—' : node.podCount,
+        names.join(', ') || '—'
+      ];
+    })
+    : [...podsByNode.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([node, names]) => [
+      node,
+      node === 'k3s-server' ? 'control-plane' : 'worker',
+      '—',
+      names.length,
+      names.join(', ') || '—'
+    ]);
+  element('nodes').replaceChildren(...placement.map(row));
+
   const distribution = (loadbalancer.distribution || []).map(item => `${item.pod}: ${item.requests}`).join(' · ') || 'No samples yet';
   element('components').replaceChildren(
     row(['Gateway', replicaText(statefulsets, 'gateway'), gateway.requestsPerSecond ?? '—', gateway.inFlight ?? '—', `p95 ${gateway.latencyP95Ms ?? 0} ms`]),
@@ -74,12 +104,13 @@ function render(status) {
     const podMetric = metrics.find(item => item.metadata.name === pod.metadata.name);
     return row([
       pod.metadata.name,
+      pod.spec?.nodeName ?? '—',
       pod.status.phase,
       `${containers.filter(item => item.ready).length} / ${pod.spec.containers.length}`,
       containers.reduce((sum, item) => sum + item.restartCount, 0),
       podMetric ? podMetric.containers.map(item => item.usage.cpu).join(', ') : 'Pending'
     ]);
-  }) : [row(['No pods reported', '—', '—', '—', '—'])]));
+  }) : [row(['No pods reported', '—', '—', '—', '—', '—'])]));
 
   const events = status.events.data?.items || [];
   if (events.length) {
@@ -157,5 +188,9 @@ element('recover').addEventListener('click', async () => {
   if (!confirm('Scale the database back to two pods and restore the latest backup?')) return;
   if (await command('/api/database/scale', { replicas: 2 })) await command('/api/database/restore');
 });
+const uiHost = `${location.protocol}//${location.hostname}`;
+element('headlamp-link').href = `${uiHost}:18084/`;
+element('kubewall-link').href = `${uiHost}:18085/`;
+
 refresh();
 setInterval(refresh, 5000);

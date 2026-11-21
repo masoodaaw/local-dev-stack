@@ -1,6 +1,6 @@
 # Kubernetes landscape lab (CKA practice environment)
 
-This is an isolated K3s landscape for learning Kubernetes and rehearsing CKA-style tasks. It runs as a single Compose service on its own Docker network (`kubernetes-lab`, `172.31.240.0/24`), separate from the other Compose services. The control room is at **http://localhost:18080/** when the default port is used, and it appears as the **Kubernetes lab** tab in the existing container dashboard.
+This is an isolated K3s landscape for learning Kubernetes and rehearsing CKA-style tasks. It runs as one server, three agents, a one-shot bootstrap job and two management UIs on its own Docker network (`kubernetes-lab`, `172.31.240.0/24`), separate from the other Compose services. The control room is at **http://localhost:18080/** when the default port is used, and it appears as the **Kubernetes lab** tab in the existing container dashboard.
 
 ## What gets deployed
 
@@ -15,24 +15,29 @@ Every request walks the same chain that a real edge platform uses, and each hop 
 | UI | `StatefulSet` ui + HPA 1–5 | serves the control room, proxies `/api/*` |
 | API | `StatefulSet` api + HPA 1–5, dedicated ServiceAccount | reads cluster state, runs scoped control actions |
 | Database | `StatefulSet` database, 2 pods, `volumeClaimTemplates` | primary + replica, ordered pod names, per-pod PVC |
-| Shared state | `PersistentVolumeClaim` landscape-shared | primary marker and rotating backups, mounted by database and API pods |
+| Shared state | `hostPath` `/shared` on every worker | primary marker and rotating backups, shared by database and API pods across nodes |
 | Traffic | `StatefulSet` traffic, scaled 0–3 | bounded CPU load generator through the full chain |
 
 Every workload is a `StatefulSet` with `podManagementPolicy: Parallel`, so pods keep stable, readable names (`gateway-0`, `loadbalancer-1`, `cdn-0`, `ui-2`, `api-0`, `database-1`) across restarts, and a headless Service gives each one a DNS name such as `api-0.api-headless`. Namespace quotas are not used, but **NetworkPolicies** default-deny ingress and only allow Traefik and the traffic generator into the gateway, gateway into the load balancer, load balancer into the CDN, CDN into the UI, UI into the API, and API/database peers into the database.
 
 ## Start on Linux
 
-The lab follows the same storage convention as the other Compose files: `DATA_DIR` comes from `.env`, and the bind mount refuses to create missing host paths. Create the state directory once:
-
-```sh
-mkdir -p "${DATA_DIR:?set DATA_DIR in .env}/kubernetes/k3s"
-```
-
-Then, from the repository root:
+`DATA_DIR` comes from `.env`, exactly like the other Compose files. Compose creates the missing host directories itself, so a fresh checkout needs no manual `mkdir`; only the read-only `landscape.yaml` file bind is strict, because a missing manifest should fail loudly. From the repository root:
 
 ```sh
 docker compose -f kubernetes.yml up -d
 ```
+
+`lab-bootstrap` is a one-shot service that runs after the server and gates the two UIs. It waits until the server has written `/etc/rancher/k3s/k3s.yaml` (persisted at `${DATA_DIR}/kubernetes/k3s-config`), sets `${DATA_DIR}/kubernetes/shared` to uid 1000 for the database and API pods, then writes `${DATA_DIR}/kubernetes/kube/config` with the API address retargeted from `https://127.0.0.1:6443` to `https://k3s:6443`. The three agents and both UIs declare `depends_on: lab-bootstrap: condition: service_completed_successfully`, so no node joins before `/shared` is writable and neither UI starts with a missing kubeconfig.
+
+Check it with:
+
+```sh
+docker compose -f kubernetes.yml ps -a
+docker compose -f kubernetes.yml logs lab-bootstrap
+```
+
+If the bootstrap exits 1, the server never produced a kubeconfig within 5 minutes — inspect `docker compose -f kubernetes.yml logs k3s`. The job is idempotent; re-run it with `docker compose -f kubernetes.yml up -d --force-recreate lab-bootstrap` (then `restart headlamp kubewall` if they were already running).
 
 Open `http://localhost:18080/`. The Compose file binds the lab to **loopback by default**. To reach it from another machine, forward the port over SSH rather than publishing it:
 
@@ -42,20 +47,58 @@ ssh -L 18080:127.0.0.1:18080 user@linux-host
 
 If you really must expose it on the LAN, set `K8S_LAB_PORT=18080` (this publishes on all interfaces) and put it behind a firewall — the lab has no login.
 
-The first start pulls `node:22-alpine` and the K3s component images, and it takes a minute or two for Traefik, metrics-server, the local-path provisioner and all pods to become ready. The manifest expects the default K3s Traefik ingress class, metrics-server, the network-policy controller and the `local-path` storage class; it is written for the pinned K3s version in `kubernetes.yml`, not for an existing shared cluster.
+The first start pulls four K3s containers, `node:22-alpine` for the workloads, and the two UI images; it takes a few minutes for Traefik, metrics-server, the local-path provisioner and all pods to become ready. The manifest expects the default K3s Traefik ingress class, metrics-server, the network-policy controller and the `local-path` storage class; it is written for the pinned K3s version in `kubernetes.yml`, not for an existing shared cluster.
+
+## Cluster topology
+
+| Compose service | K3s node | Role |
+| --- | --- | --- |
+| `k3s` | `k3s-server` | control plane, tainted `k3s.io/lab-control-plane=true:NoSchedule` |
+| `k3s-agent-1` | `k3s-agent-1` | worker, publishes the ingress on `127.0.0.1:18080` |
+| `k3s-agent-2` | `k3s-agent-2` | worker |
+| `k3s-agent-3` | `k3s-agent-3` | worker |
+
+Agents join with `K3S_URL=https://k3s:6443` and a shared `K3S_LAB_TOKEN` (defaults to a fixed lab token in `kubernetes.yml`; set `K3S_LAB_TOKEN` in `.env` to change it). The server certificate carries `--tls-san=k3s`, so agents verify it by name. The control plane is tainted and every workload carries a `topologySpreadConstraints` rule on `kubernetes.io/hostname`, so HPA replicas (up to 5 for `ui`/`api`) spread across the three workers.
+
+`kubectl` runs inside the server container; it is the only service that publishes the API:
+
+```sh
+docker compose -f kubernetes.yml exec k3s kubectl get nodes -o wide
+```
+
+The ingress is published from the workers, not the control plane: the control plane is tainted and the `svclb-traefik` host-port pods do not tolerate the lab taint. Each worker exposes the same Traefik entry point on a different loopback port — `k3s-agent-1` on 18080, `k3s-agent-2` on 18081, `k3s-agent-3` on 18082 — so if one worker stops you can switch to another port; whichever worker is up load-balances across the running Traefik pods. Override them with `K8S_LAB_PORT`, `K8S_LAB_PORT_2` and `K8S_LAB_PORT_3`.
+
+## Management UIs
+
+| UI | Container | Port (loopback) | Notes |
+| --- | --- | --- | --- |
+| [Headlamp](https://headlamp.dev/) | `headlamp` | `127.0.0.1:18084` | `ghcr.io/headlamp-k8s/headlamp:v0.46.0` started with `-kubeconfig=/kubeconfig/config`; `${DATA_DIR}/kubernetes/kube` is mounted at `/kubeconfig` |
+| [KubeWall](https://github.com/kubewall/kubewall) | `kubewall` | `127.0.0.1:18085` | `ghcr.io/kubewall/kubewall:0.0.23` with `${DATA_DIR}/kubernetes/kube` at `/.kube` and its state in `/.kubewall` |
+
+Every image is pinned to a version tag (`rancher/k3s:v1.31.6-k3s1`, `headlamp:v0.46.0`, `kubewall:0.0.23`), so a fresh `docker compose up` resolves the same images. Both UIs mount `${DATA_DIR}/kubernetes/kube` (containing `config`) read-only and reach the API at `https://k3s:6443` over the lab network. That file is the cluster-admin kubeconfig, so **neither UI has authentication** — they are bound to loopback, exactly like the rest of the lab; do not publish them. Override the ports with `HEADLAMP_PORT` / `KUBEWALL_PORT`. The control room links both, and the main container dashboard lists them too.
+
+If you change cluster credentials or the API port, re-run the bootstrap (`up -d --force-recreate lab-bootstrap`) and then `restart headlamp kubewall`.
 
 ## Host persistence (no data in the container layer)
 
 All state is bind-mounted from the Linux host, the same idea as the bind mounts used by the other Compose files:
 
 ```text
-${DATA_DIR}/kubernetes/k3s   -> /var/lib/rancher/k3s                          (K3s state, containerd, local-path volumes)
-./kubernetes/landscape.yaml  -> /var/lib/rancher/k3s/server/manifests/landscape.yaml   (read-only, from the repo)
+${DATA_DIR}/kubernetes/k3s             -> /var/lib/rancher/k3s   (server: API state, manifests, TLS)
+${DATA_DIR}/kubernetes/k3s-agent-1..3  -> /var/lib/rancher/k3s   (each agent: containerd, local-path PV directories)
+${DATA_DIR}/kubernetes/<node>/log      -> /var/log                (per node; overrides the image VOLUME)
+${DATA_DIR}/kubernetes/<node>/cni      -> /var/lib/cni            (per node; overrides the image VOLUME)
+${DATA_DIR}/kubernetes/<node>/kubelet  -> /var/lib/kubelet        (per node; overrides the image VOLUME)
+${DATA_DIR}/kubernetes/shared          -> /shared                 (bind-mounted into every agent)
+${DATA_DIR}/kubernetes/k3s-config      -> /etc/rancher/k3s        (server: admin kubeconfig)
+${DATA_DIR}/kubernetes/kube/config     -> /kubeconfig/config and /.kube/config (read-only, the two UIs)
+${DATA_DIR}/kubernetes/kubewall        -> /.kubewall              (KubeWall state)
+./kubernetes/landscape.yaml            -> .../manifests/landscape.yaml   (read-only, from the repo)
 ```
 
-Both are declared with the long bind syntax and `create_host_path: false`, so a typo in `DATA_DIR` fails the start instead of silently writing to a new directory.
+All of them use the long bind syntax, so Docker creates missing directories on first start; only the `landscape.yaml` file bind is strict, because a missing manifest should fail loudly.
 
-The database pods use `volumeClaimTemplates` (one PVC per pod) and the shared `landscape-shared` PVC for the primary marker and backups. The local-path provisioner stores both under `${DATA_DIR}/kubernetes/k3s/storage`, so `docker compose down` and `up` keep the counter, the replica data and the backups. Deleting `${DATA_DIR}/kubernetes/k3s` is a full reset and cannot be undone.
+The database pods use `volumeClaimTemplates` (one `local-path` PVC per pod, bound to the worker that scheduled it) for their data. The shared primary marker and backups cannot use a `ReadWriteOnce` local-path claim once the two database pods and up to five API pods can land on different workers, so `/shared` is a `hostPath` volume that all three agents bind to the same host directory; `lab-bootstrap` gives that directory to uid 1000 on every start. `docker compose down` and `up` keep the counter, the replica data and the backups. Deleting `${DATA_DIR}/kubernetes/k3s*` and `${DATA_DIR}/kubernetes/shared` is a full reset and cannot be undone. Because `local-path` PVs are node-bound, a database pod whose worker is removed cannot reschedule elsewhere until that worker returns or you delete its PVC.
 
 ## Simulation walkthrough
 
@@ -82,7 +125,7 @@ The **Component usage** table shows requests/sec, in-flight requests, p95 latenc
 
 ### 4. Total loss and disaster recovery
 
-1. Press **Back up now** to snapshot the counter onto the shared PVC (last 10 snapshots are kept).
+1. Press **Back up now** to snapshot the counter onto the shared host directory (last 10 snapshots are kept).
 2. Add a few more counts so the live counter is ahead of the backup.
 3. Press **Simulate total DB loss**. The StatefulSet is scaled to 0; API and UI report the database as unavailable.
 4. Press **Recover from backup**. The StatefulSet is scaled back to 2 and the latest snapshot is restored; the counter rolls back to the snapshot value. That gap is the **RPO**; the time between loss and a working database is the **RTO**.
@@ -108,7 +151,7 @@ Changing the ConfigMap does not restart Node processes by itself; after applying
 | `GET /api/status` | Workloads, HPAs, pods, metrics, events, component stats, database state |
 | `POST /api/traffic` | JSON `{"level":0..3}`; scales the traffic generator |
 | `POST /api/database/increment` | Persisted counter increment |
-| `POST /api/database/backup` | Snapshot the primary to the shared PVC |
+| `POST /api/database/backup` | Snapshot the primary to the shared host directory |
 | `POST /api/database/restore` | Restore the latest snapshot |
 | `POST /api/database/failover` | Delete `database-0` so the replica is promoted |
 | `POST /api/database/scale` | JSON `{"replicas":0}` for total loss or `{"replicas":2}` to recover |
@@ -120,7 +163,7 @@ Mutations require `Content-Type: application/json` and a matching loopback `Orig
 
 ## Security and isolation
 
-Only API pods receive the `landscape-controller` service-account token. Its namespace Role can list pods, StatefulSets, HPAs and pod metrics, list events, delete `database-0`, and patch the scale of the `traffic` StatefulSet and the `database` StatefulSet. It cannot read Secrets or change other workloads. No kubeconfig, cluster-admin token or secret is exposed to the browser.
+Only API pods receive the `landscape-controller` service-account token. Its namespace Role can list pods, StatefulSets, HPAs and pod metrics, list events, delete `database-0`, and patch the scale of the `traffic` StatefulSet and the `database` StatefulSet; a single cluster-scoped ClusterRole adds read-only `get`/`list` on nodes for the placement table. It cannot read Secrets or change other workloads. No kubeconfig, cluster-admin token or secret is exposed to the browser.
 
 NetworkPolicies isolate the layers inside the namespace, and the whole cluster lives on the dedicated `kubernetes-lab` Docker network. Egress is not restricted; the host and cluster administrators remain trusted.
 
@@ -128,6 +171,8 @@ NetworkPolicies isolate the layers inside the namespace, and the whole cluster l
 
 ```sh
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get statefulsets,pods,hpa,svc,pvc
+docker compose -f kubernetes.yml exec k3s kubectl get nodes -o wide
+docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get pods -o wide
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab top pods
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab describe hpa ui
 docker compose -f kubernetes.yml exec k3s kubectl -n landscape-lab get events --sort-by=.lastTimestamp

@@ -1,21 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1010" width="1200" height="1010" role="img" aria-labelledby="title desc">
   <title id="title">Kubernetes landscape architecture</title>
-  <desc id="desc">Request path from browser through Traefik ingress, gateway, load balancer, CDN, UI and API deployments with horizontal pod autoscalers, to a primary and replica database StatefulSet with host-mounted backups.</desc>
+  <desc id="desc">Request path from browser through Traefik ingress, gateway, load balancer, CDN, UI and API StatefulSets with horizontal pod autoscalers, to a primary and replica database StatefulSet, running on a K3s cluster with one tainted control plane, three workers, a shared hostPath volume and two management UIs.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#3f6b5e"/>
     </marker>
     <style>
       .box { fill: #ffffff; stroke: #7fa596; stroke-width: 1.5; rx: 6; }
-      .box-dark { fill: #102e2e; stroke: #102e2e; }
       .chip { fill: #eef5f1; stroke: #a9c4b8; stroke-width: 1; rx: 4; }
       .warn { fill: #fdf6e8; stroke: #d8b558; stroke-width: 1.5; rx: 6; }
       .t { font-family: 'Trebuchet MS', Arial, sans-serif; fill: #142327; font-size: 12px; }
       .small { font-size: 10.5px; fill: #5c736c; }
       .name { font-size: 13px; font-weight: 700; }
       .mono { font-family: Consolas, monospace; font-size: 10.5px; fill: #40564f; }
-      .light { fill: #e8f4ee; }
-      .light-small { fill: #a9cfbf; font-size: 10.5px; }
       .line { stroke: #3f6b5e; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
       .dash { stroke: #b0862c; stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrow); }
       .label { font-family: 'Trebuchet MS', Arial, sans-serif; font-size: 10.5px; fill: #6b7f79; }
@@ -23,9 +20,9 @@
   </defs>
   <rect width="1200" height="900" fill="#f5f7f5"/>
   <text x="55" y="48" class="t" font-size="24" font-family="Georgia, serif">Kubernetes landscape — request path, autoscaling and disaster recovery</text>
-  <text x="55" y="70" class="small">K3s in a dedicated Compose network · namespace landscape-lab · NetworkPolicy segmented · host-persisted data</text>
+  <text x="55" y="70" class="small">K3s 1 server + 3 agents in a dedicated Compose network · namespace landscape-lab · NetworkPolicy segmented · host-persisted data</text>
 
-  <rect x="30" y="92" width="1140" height="700" fill="#fbfdfb" stroke="#cfdad4" stroke-width="1.5" rx="10"/>
+  <rect x="30" y="92" width="1140" height="840" fill="#fbfdfb" stroke="#cfdad4" stroke-width="1.5" rx="10"/>
   <text x="50" y="116" class="label">LINUX HOST · kubernetes.yml · docker compose network kubernetes-lab</text>
 
   <g>
@@ -33,36 +30,36 @@
     <text x="66" y="180" class="t name">Browser</text>
     <text x="66" y="200" class="small">Tap the lab at</text>
     <text x="66" y="217" class="mono">localhost:18080</text>
-    <text x="66" y="237" class="small">same-origin</text>
-    <text x="66" y="251" class="small">mutation checks</text>
+    <text x="66" y="232" class="small">same-origin</text>
+    <text x="66" y="246" class="small">mutation checks</text>
 
     <rect x="200" y="150" width="134" height="100" class="box"/>
     <text x="214" y="180" class="t name">Traefik Ingress</text>
     <text x="214" y="200" class="small">K3s bundled controller</text>
     <text x="214" y="217" class="mono">ingressClassName:</text>
     <text x="214" y="232" class="mono">traefik</text>
-    <text x="214" y="249" class="small">no TLS or auth</text>
+    <text x="214" y="246" class="small">no TLS or auth</text>
 
     <rect x="368" y="150" width="142" height="100" class="box"/>
     <text x="382" y="180" class="t name">Gateway</text>
     <text x="382" y="200" class="small">StatefulSet + HPA</text>
     <text x="382" y="217" class="small">1–3 pods · request</text>
     <text x="382" y="234" class="small">counter, p95 latency</text>
-    <text x="382" y="249" class="mono">/_gateway/stats</text>
+    <text x="382" y="246" class="mono">/_gateway/stats</text>
 
     <rect x="544" y="150" width="156" height="100" class="box"/>
     <text x="558" y="180" class="t name">Load balancer</text>
     <text x="558" y="200" class="small">StatefulSet + HPA 1–3</text>
     <text x="558" y="217" class="small">round-robin across CDN</text>
     <text x="558" y="234" class="small">pod IPs (DNS SRV)</text>
-    <text x="558" y="249" class="mono">/_lb/stats</text>
+    <text x="558" y="246" class="mono">/_lb/stats</text>
 
     <rect x="728" y="150" width="150" height="100" class="box"/>
     <text x="742" y="180" class="t name">CDN</text>
     <text x="742" y="200" class="small">StatefulSet + HPA 1–3</text>
     <text x="742" y="217" class="small">15 s GET cache, hit</text>
     <text x="742" y="234" class="small">ratio, bytes saved</text>
-    <text x="742" y="249" class="mono">/_cdn/stats</text>
+    <text x="742" y="246" class="mono">/_cdn/stats</text>
   </g>
 
   <path class="line" d="M164,200 H196"/>
@@ -74,7 +71,7 @@
 
   <g>
     <rect x="852" y="330" width="252" height="126" class="box"/>
-    <text x="866" y="356" class="t name">UI deployment + HPA</text>
+    <text x="866" y="356" class="t name">UI StatefulSet + HPA</text>
     <text x="866" y="374" class="small">1–5 pods, CPU target 60%</text>
     <text x="866" y="391" class="small">serves dashboard and proxies</text>
     <text x="866" y="408" class="small">/api/* to the API service</text>
@@ -83,7 +80,7 @@
     <rect x="1014" y="420" width="66" height="22" class="chip"/><text x="1023" y="436" class="small">ui-…</text>
 
     <rect x="596" y="330" width="220" height="126" class="box"/>
-    <text x="610" y="356" class="t name">API deployment + HPA</text>
+    <text x="610" y="356" class="t name">API StatefulSet + HPA</text>
     <text x="610" y="374" class="small">1–5 pods, CPU target 60%</text>
     <text x="610" y="391" class="small">Kubernetes API reads and</text>
     <text x="610" y="408" class="small">scoped control actions</text>
@@ -99,11 +96,10 @@
 
     <rect x="52" y="330" width="226" height="126" class="box"/>
     <text x="66" y="356" class="t name">Host-persisted backups</text>
-    <text x="66" y="376" class="small">shared PVC, local-path</text>
-    <text x="66" y="394" class="mono">./kubernetes/data/k3s/storage</text>
-    <text x="66" y="409" class="mono">→ landscape-shared PVC</text>
-    <text x="66" y="423" class="mono">persisted on host</text>
-    <text x="66" y="444" class="small">latest.json + 10 snapshots</text>
+    <text x="66" y="376" class="small">hostPath, all three workers</text>
+    <text x="66" y="394" class="mono">shared hostPath volume</text>
+    <text x="66" y="409" class="mono">persisted on host</text>
+    <text x="66" y="430" class="small">latest.json + 10 snapshots</text>
   </g>
 
   <path class="line" d="M852,393 H820"/>
@@ -119,14 +115,14 @@
 
     <rect x="318" y="556" width="330" height="88" class="box"/>
     <text x="332" y="582" class="t name">HorizontalPodAutoscalers</text>
-    <text x="332" y="600" class="small">gateway 1–3 · loadbalancer 1–3 · cdn 1–3</text>
-    <text x="332" y="616" class="small">ui 1–5 · api 1–5 (CPU utilisation)</text>
+    <text x="332" y="600" class="small">gateway · loadbalancer · cdn 1–3 at 70% CPU</text>
+    <text x="332" y="616" class="small">ui · api 1–5 at 60% CPU</text>
     <text x="332" y="633" class="small">metrics-server samples; scale-down is slow</text>
 
     <rect x="676" y="556" width="470" height="88" class="box"/>
     <text x="690" y="582" class="t name">Where the data lives on the host</text>
-    <text x="690" y="601" class="mono">./kubernetes/data/k3s  → K3s state + local-path PVCs</text>
-    <text x="690" y="618" class="mono">./kubernetes/data/k3s/storage → primary.json, backups/</text>
+    <text x="690" y="601" class="mono">${DATA_DIR}/kubernetes/k3s → K3s state + local-path PVCs</text>
+    <text x="690" y="618" class="mono">${DATA_DIR}/kubernetes/shared → primary.json, backups/</text>
     <text x="690" y="635" class="small">delete the host directories and the lab starts empty</text>
   </g>
 
@@ -135,10 +131,48 @@
 
   <rect x="52" y="676" width="1094" height="96" fill="#eef5f1" stroke="#b9cdc4" stroke-width="1" rx="6"/>
   <text x="68" y="700" class="t name">NetworkPolicy segmentation (Ingress default-deny)</text>
-  <text x="68" y="720" class="small">traefik + traffic → gateway → loadbalancer → cdn → ui → api → database (api and database peers) → shared backups PVC</text>
-  <text x="68" y="741" class="small">No pod mounts a service-account token except the API, whose Role can only list workloads, watch events, delete database-0 and scale the traffic and database workloads.</text>
-  <text x="68" y="760" class="small">Volumes: local-path PVCs per database pod for data, a shared PVC for the primary marker and backups. Nothing is stored in the container filesystem.</text>
+  <text x="68" y="720" class="small">traefik + traffic → gateway → loadbalancer → cdn → ui → api → database (api and database peers)</text>
+  <text x="68" y="741" class="small">No pod mounts a service-account token except the API, whose Role only lists pods, events, StatefulSets, HPAs, metrics and nodes, deletes database-0 and patches the database and traffic scale.</text>
+  <text x="68" y="760" class="small">Volumes: local-path PVCs per database pod for data, a shared hostPath volume for the primary marker and backups. Nothing is stored in the container filesystem.</text>
 
-  <text x="55" y="832" class="label">Request path: browser → Traefik → gateway → load balancer → CDN → UI → API → primary database. Replica promotes on failure; restore rolls back to the latest backup.</text>
-  <text x="55" y="852" class="label">Practice: kubectl get all -n landscape-lab · kubectl get hpa -w · kubectl describe statefulset database · kubectl get pvc,pv</text>
+  <rect x="52" y="788" width="1094" height="132" fill="#fbfdfb" stroke="#cfdad4" stroke-width="1" rx="8"/>
+  <text x="68" y="810" class="label">K3s cluster · 1 tainted control plane + 3 workers · replicas spread on kubernetes.io/hostname</text>
+
+  <rect x="68" y="822" width="190" height="58" class="box"/>
+  <text x="80" y="842" class="t name">k3s-server</text>
+  <text x="80" y="858" class="small">control plane · tainted NoSchedule</text>
+  <text x="80" y="872" class="mono">API 6443 · Traefik</text>
+
+  <rect x="274" y="822" width="170" height="58" class="box"/>
+  <text x="286" y="842" class="t name">k3s-agent-1</text>
+  <text x="286" y="858" class="small">worker · ingress 18080</text>
+  <text x="286" y="872" class="mono">mounts /shared</text>
+
+  <rect x="456" y="822" width="170" height="58" class="box"/>
+  <text x="468" y="842" class="t name">k3s-agent-2</text>
+  <text x="468" y="858" class="small">worker · ingress 18081</text>
+  <text x="468" y="872" class="mono">mounts /shared</text>
+
+  <rect x="638" y="822" width="170" height="58" class="box"/>
+  <text x="650" y="842" class="t name">k3s-agent-3</text>
+  <text x="650" y="858" class="small">worker · ingress 18082</text>
+  <text x="650" y="872" class="mono">mounts /shared</text>
+
+  <rect x="826" y="822" width="150" height="58" class="box"/>
+  <text x="838" y="842" class="t name">Headlamp</text>
+  <text x="838" y="858" class="small">UI · localhost:18084</text>
+  <text x="838" y="872" class="mono">v0.46.0</text>
+
+  <rect x="990" y="822" width="144" height="58" class="box"/>
+  <text x="1002" y="842" class="t name">KubeWall</text>
+  <text x="1002" y="858" class="small">UI · localhost:18085</text>
+  <text x="1002" y="872" class="mono">0.0.23</text>
+
+  <rect x="68" y="890" width="740" height="22" class="chip"/>
+  <text x="78" y="905" class="mono">shared hostPath /shared → ${DATA_DIR}/kubernetes/shared · primary.json + backups/ · database and API pods</text>
+  <rect x="826" y="890" width="308" height="22" class="chip"/>
+  <text x="836" y="905" class="mono">read /kube/config → https://k3s:6443</text>
+
+  <text x="55" y="960" class="label">Request path: browser → Traefik → gateway → load balancer → CDN → UI → API → primary database. Replica promotes on failure; restore rolls back to the latest backup.</text>
+  <text x="55" y="980" class="label">Practice: kubectl get all -n landscape-lab · kubectl get hpa -w · kubectl describe statefulset database · kubectl get pvc,pv · kubectl get nodes -o wide</text>
 </svg>

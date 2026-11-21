@@ -52,12 +52,15 @@ const groups = [
   ] }
   ,
   { name: "Kubernetes lab", icon: "hexagon", services: [
-    { id: "k8s-landscape", container: "k8s-k3s", name: "Kubernetes landscape", note: "K3s lab: gateway, load balancer, CDN, UI, API, database + DR", ports: [18080], links: [[18080, "/", "Open control room"], [18080, "/architecture.svg", "Architecture"]] },
+    { id: "k8s-landscape", container: "k8s-k3s", name: "Kubernetes landscape", note: "K3s lab: 1 server + 3 agent nodes; gateway, load balancer, CDN, UI, API, database + DR", ports: [18080], links: [[18080, "/", "Open control room"], [18080, "/architecture.svg", "Architecture"]] },
+    { id: "k8s-landscape-alt", container: "k8s-agent", name: "Kubernetes landscape (worker ingress)", note: "Same control room through k3s-agent-2 (18081) or k3s-agent-3 (18082)", ports: [18081, 18082], links: [[18081, "/", "Via k3s-agent-2"], [18082, "/", "Via k3s-agent-3"]] },
     { id: "k8s-gateway", container: "k8s-k3s", name: "Gateway stats", note: "Request rate, in-flight and p95 latency (JSON API)", ports: [18080], links: [[18080, "/_gateway/stats", "Gateway stats (API)"]] },
     { id: "k8s-loadbalancer", container: "k8s-k3s", name: "Load balancer stats", note: "Round-robin distribution across CDN pods (JSON API)", ports: [18080], links: [[18080, "/_lb/stats", "LB stats (API)"]] },
     { id: "k8s-cdn", container: "k8s-k3s", name: "CDN stats", note: "Cache hits, hit ratio and object count (JSON API)", ports: [18080], links: [[18080, "/_cdn/stats", "CDN stats (API)"]] },
     { id: "k8s-status", container: "k8s-k3s", name: "Cluster status", note: "Pods, HPAs, metrics, events and database state (JSON API)", ports: [18080], links: [[18080, "/api/status", "Cluster status (API)"]] },
-    { id: "k8s-kubectl", container: "k8s-k3s", name: "kubectl access", note: "API server on 127.0.0.1:16443; run docker compose exec k3s kubectl", ports: [16443] }
+    { id: "k8s-headlamp", container: "k8s-headlamp", name: "Headlamp", note: "Kubernetes web UI on the lab kubeconfig (18084)", ports: [18084], links: [[18084, "/", "Open Headlamp"]] },
+    { id: "k8s-kubewall", container: "k8s-kubewall", name: "KubeWall", note: "Multi-cluster dashboard on the lab kubeconfig (18085)", ports: [18085], links: [[18085, "/", "Open KubeWall"]] },
+    { id: "k8s-kubectl", container: "k8s-k3s", name: "kubectl access", note: "API server on 127.0.0.1:16443; run docker compose exec k3s kubectl get nodes", ports: [16443] }
   ] }
 ];
 

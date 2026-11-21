@@ -55,6 +55,28 @@ roleRef:
   kind: Role
   name: landscape-controller
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: landscape-node-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: landscape-node-reader
+subjects:
+  - kind: ServiceAccount
+    name: landscape-controller
+    namespace: landscape-lab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: landscape-node-reader
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -280,18 +302,6 @@ spec:
   selector: {app: database}
   ports: [{name: http, port: 8080, targetPort: 8080}]
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: landscape-shared
-  namespace: landscape-lab
-spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: local-path
-  resources:
-    requests:
-      storage: 128Mi
----
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -327,6 +337,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: gateway}}
       containers:
         - name: gateway
           image: node:22-alpine
@@ -358,6 +373,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: loadbalancer}}
       containers:
         - name: loadbalancer
           image: node:22-alpine
@@ -389,6 +409,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: cdn}}
       containers:
         - name: cdn
           image: node:22-alpine
@@ -420,6 +445,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: ui}}
       containers:
         - name: ui
           image: node:22-alpine
@@ -451,6 +481,11 @@ spec:
     spec:
       serviceAccountName: landscape-controller
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: api}}
       containers:
         - name: api
           image: node:22-alpine
@@ -469,8 +504,7 @@ spec:
       volumes:
         - {name: app, configMap: {name: landscape-app}}
         - name: shared
-          persistentVolumeClaim:
-            claimName: landscape-shared
+          hostPath: {path: /shared, type: Directory}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -490,6 +524,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: traffic}}
       containers:
         - name: traffic
           image: node:22-alpine
@@ -518,6 +557,11 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app: database}}
       containers:
         - name: database
           image: node:22-alpine
@@ -538,8 +582,7 @@ spec:
       volumes:
         - {name: app, configMap: {name: landscape-app}}
         - name: shared
-          persistentVolumeClaim:
-            claimName: landscape-shared
+          hostPath: {path: /shared, type: Directory}
   volumeClaimTemplates:
     - metadata: {name: data}
       spec:

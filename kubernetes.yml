@@ -1,27 +1,189 @@
 name: kubernetes-lab
 
+x-k3s-base: &k3s-base
+  image: rancher/k3s:v1.31.6-k3s1
+  privileged: true
+  restart: unless-stopped
+  environment:
+    K3S_TOKEN: ${K3S_LAB_TOKEN:-landscape-lab-cluster-token}
+  networks:
+    - kubernetes-lab
+
+x-k3s-agent: &k3s-agent
+  <<: *k3s-base
+  depends_on:
+    k3s:
+      condition: service_started
+    lab-bootstrap:
+      condition: service_completed_successfully
+  environment:
+    K3S_URL: https://k3s:6443
+    K3S_TOKEN: ${K3S_LAB_TOKEN:-landscape-lab-cluster-token}
+
 services:
   k3s:
-    image: rancher/k3s:v1.31.6-k3s1
-    privileged: true
+    <<: *k3s-base
     hostname: k3s
-    restart: unless-stopped
-    command: server --write-kubeconfig-mode=600 --node-name=k3s
+    command: >-
+      server --write-kubeconfig-mode=600 --node-name=k3s-server
+      --tls-san=k3s --node-taint=k3s.io/lab-control-plane=true:NoSchedule
     ports:
       - "127.0.0.1:16443:6443"
-      - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
     volumes:
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s
         target: /var/lib/rancher/k3s
-        bind:
-          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/log
+        target: /var/log
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/cni
+        target: /var/lib/cni
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/kubelet
+        target: /var/lib/kubelet
       - type: bind
         source: ./kubernetes/landscape.yaml
         target: /var/lib/rancher/k3s/server/manifests/landscape.yaml
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-config
+        target: /etc/rancher/k3s
+    networks:
+      - kubernetes-lab
+
+  k3s-agent-1:
+    <<: *k3s-agent
+    hostname: k3s-agent-1
+    command: agent --node-name=k3s-agent-1
+    ports:
+      - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-1
+        target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-1/log
+        target: /var/log
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-1/cni
+        target: /var/lib/cni
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-1/kubelet
+        target: /var/lib/kubelet
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/shared
+        target: /shared
+  k3s-agent-2:
+    <<: *k3s-agent
+    hostname: k3s-agent-2
+    command: agent --node-name=k3s-agent-2
+    ports:
+      - "${K8S_LAB_PORT_2:-127.0.0.1:18081}:80"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-2
+        target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-2/log
+        target: /var/log
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-2/cni
+        target: /var/lib/cni
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-2/kubelet
+        target: /var/lib/kubelet
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/shared
+        target: /shared
+  k3s-agent-3:
+    <<: *k3s-agent
+    hostname: k3s-agent-3
+    command: agent --node-name=k3s-agent-3
+    ports:
+      - "${K8S_LAB_PORT_3:-127.0.0.1:18082}:80"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-3
+        target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-3/log
+        target: /var/log
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-3/cni
+        target: /var/lib/cni
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-3/kubelet
+        target: /var/lib/kubelet
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/shared
+        target: /shared
+  lab-bootstrap:
+    image: alpine:3.20.3
+    network_mode: none
+    depends_on:
+      k3s:
+        condition: service_started
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/shared
+        target: /shared
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /kube
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-config
+        target: /k3s-config
+        read_only: true
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        chown 1000:1000 /shared || true
+        timeout 300 sh -c 'until grep -q client-key-data /k3s-config/k3s.yaml 2>/dev/null; do sleep 2; done'
+        sed 's#https://127.0.0.1:6443#https://k3s:6443#' /k3s-config/k3s.yaml > /kube/config
+        chmod 600 /kube/config
+        echo "bootstrap: wrote /kube/config and prepared /shared"
+
+  headlamp:
+    image: ghcr.io/headlamp-k8s/headlamp:v0.46.0
+    user: "0:0"
+    restart: unless-stopped
+    depends_on:
+      lab-bootstrap:
+        condition: service_completed_successfully
+    command: ["-kubeconfig=/kubeconfig/config", "-port=4466"]
+    ports:
+      - "${HEADLAMP_PORT:-127.0.0.1:18084}:4466"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /kubeconfig
+        read_only: true
+    networks:
+      - kubernetes-lab
+
+  kubewall:
+    image: ghcr.io/kubewall/kubewall:0.0.23
+    user: "0:0"
+    restart: unless-stopped
+    depends_on:
+      lab-bootstrap:
+        condition: service_completed_successfully
+    command: ["--listen=:7080", "--no-open-browser"]
+    ports:
+      - "${KUBEWALL_PORT:-127.0.0.1:18085}:7080"
+    volumes:
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/kubewall
+        target: /.kubewall
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /.kube
+        read_only: true
     networks:
       - kubernetes-lab
 

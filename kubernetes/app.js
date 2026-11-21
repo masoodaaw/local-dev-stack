@@ -364,8 +364,8 @@ async function dbRequest(target, method = 'GET', attempt = 0, clients = {}) {
   }
 }
 
-async function componentStats(hostname, target) {
-  const result = await internal(hostname, target, 'GET', {}, undefined, 4000);
+async function componentStats(hostname, target, client = internal) {
+  const result = await client(hostname, target, 'GET', {}, undefined, 4000);
   if (result.status !== 200) throw new Error(`${hostname} HTTP ${result.status}`);
   return JSON.parse(result.data);
 }
@@ -377,6 +377,20 @@ async function collectStatus(clients = {}) {
   const core = `/api/v1/namespaces/${namespace}`;
   const tasks = {
     statefulsets: () => kubeClient(`${apps}/statefulsets?labelSelector=${label}`),
+    nodes: async () => {
+      const data = await kubeClient('/api/v1/nodes');
+      return {
+        items: (data.items || []).map(node => ({
+          name: node.metadata.name,
+          roles: Object.keys(node.metadata.labels || {})
+            .filter(key => key.startsWith('node-role.kubernetes.io/'))
+            .map(key => key.slice('node-role.kubernetes.io/'.length))
+            .sort(),
+          taints: (node.spec?.taints || []).map(taint => ({ key: taint.key, value: taint.value || '', effect: taint.effect })),
+          unschedulable: Boolean(node.spec?.unschedulable)
+        }))
+      };
+    },
     pods: () => kubeClient(`${core}/pods?labelSelector=${label}`),
     hpas: () => kubeClient(`/apis/autoscaling/v2/namespaces/${namespace}/horizontalpodautoscalers?labelSelector=${label}`),
     metrics: () => kubeClient(`/apis/metrics.k8s.io/v1beta1/namespaces/${namespace}/pods?labelSelector=${label}`),
@@ -388,9 +402,9 @@ async function collectStatus(clients = {}) {
         .slice(0, 12);
       return data;
     },
-    gateway: () => componentStats('gateway', '/_gateway/stats'),
-    loadbalancer: () => componentStats('loadbalancer', '/_lb/stats'),
-    cdn: () => componentStats('cdn', '/_cdn/stats'),
+    gateway: () => componentStats('gateway', '/_gateway/stats', internalClient),
+    loadbalancer: () => componentStats('loadbalancer', '/_lb/stats', internalClient),
+    cdn: () => componentStats('cdn', '/_cdn/stats', internalClient),
     database: async () => {
       const result = await dbRequest('/state', 'GET', 0, { internal: internalClient });
       return { ...result.data, activePod: result.pod, failover: result.failover };
@@ -405,7 +419,22 @@ async function collectStatus(clients = {}) {
     }
   }));
   const result = Object.fromEntries(entries);
-  if (result.pods.data) result.pods.data.items = result.pods.data.items.filter(pod => isLabPod(pod.metadata.name));
+  const counts = new Map();
+  let podsKnown = false;
+  if (result.pods.data) {
+    podsKnown = true;
+    result.pods.data.items = result.pods.data.items.filter(pod => isLabPod(pod.metadata.name));
+    for (const pod of result.pods.data.items) {
+      const node = pod.spec?.nodeName;
+      if (node) counts.set(node, (counts.get(node) || 0) + 1);
+    }
+  }
+  if (result.nodes.data) {
+    result.nodes.data.items = result.nodes.data.items.map(node => ({
+      ...node,
+      podCount: podsKnown ? counts.get(node.name) || 0 : null
+    }));
+  }
   return result;
 }
 

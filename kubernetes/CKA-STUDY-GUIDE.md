@@ -14,7 +14,7 @@ Official sources: [CNCF CKA page](https://www.cncf.io/training/certification/cka
 
 ## What this lab can and cannot teach
 
-This single-node K3s cluster is excellent for the workload, networking, storage, RBAC and troubleshooting domains, because it runs the real controllers and the real API server. It is **not** a kubeadm cluster: control-plane static Pods, `kubeadm upgrade`, etcd snapshots and multi-node HA need their own VMs. Do those drills in a throwaway VM pair (Vagrant, Multipass, cloud instances) rather than compromising this lab.
+This four-node K3s cluster (one tainted control plane, three workers) is excellent for the workload, scheduling, networking, storage, RBAC and troubleshooting domains, because it runs the real controllers, the real API server and the real scheduler across multiple nodes. It is **not** a kubeadm cluster: control-plane static Pods, `kubeadm upgrade`, etcd snapshots and HA control planes (multiple servers) need their own VMs. Do those drills in a throwaway VM pair (Vagrant, Multipass, cloud instances) rather than compromising this lab.
 
 | CKA topic | Where it lives here |
 | --- | --- |
@@ -26,7 +26,8 @@ This single-node K3s cluster is excellent for the workload, networking, storage,
 | NetworkPolicy default-deny and allow rules | seven policies in `resources.yaml` |
 | RBAC Role/RoleBinding and least privilege | `landscape-controller` ServiceAccount |
 | ConfigMap volume projection | `landscape-app` ConfigMap mounted at `/app` |
-| StorageClass, dynamic provisioning, PVC | `local-path`, `landscape-shared` claim, DB claims |
+| StorageClass, dynamic provisioning, PVC | `local-path`, DB `volumeClaimTemplates` |
+| Scheduling across nodes, taints, drains | `k3s-server` taint, `k3s-agent-1..3`, hostname spread, `/shared` hostPath |
 | Rollouts, rollbacks, self-healing | `kubectl rollout` and StatefulSet recreation |
 | Observability and events | `kubectl top`, `describe`, `logs`, `get events` |
 
@@ -138,11 +139,22 @@ ETCDCTL_API=3 etcdctl snapshot save /tmp/etcd.db \
 ETCDCTL_API=3 etcdctl snapshot status /tmp/etcd.db --write-out=table
 ```
 
+## Multi-node drills
+
+One control plane (`k3s-server`, tainted) and three workers (`k3s-agent-1..3`). All lab pods run on the workers; each workload spreads replicas by hostname.
+
+1. **Cordon and drain.** `K cordon k3s-agent-3`, then `K drain k3s-agent-3 --ignore-daemonsets --delete-emptydir-data`, watch replicas reschedule to the other workers, then `K uncordon k3s-agent-3`.
+2. **Taint and tolerate.** Add `learning=blocked:NoSchedule` to `k3s-agent-2`, create a Pod without a toleration, read the `FailedScheduling` event, then add the toleration and reschedule.
+3. **Spread.** Scale `ui` to 3 and confirm `K get pods -o wide` reports one pod per worker.
+4. **Node failure.** `docker compose stop k3s-agent-2`, watch its pods go `Unknown` and be recreated, then `docker compose start k3s-agent-2` and confirm `K get nodes` returns it to `Ready`.
+5. **Control-plane isolation.** `K describe node k3s-server | grep -A3 Taints` explains why no lab pod runs there.
+6. **Placement debugging.** `K describe pod <ui pod>` and read `Node-Selectors`, `Tolerations` and the scheduling events.
+
 ## Ten graded exercises
 
 Work without looking at the README until you are stuck; each has an objective check.
 
-1. **Scale on demand.** Make `ui` run exactly 3 replicas without editing YAML, then restore HPA control. *Check:* `K get deploy ui` shows 3, then HPA reclaims it.
+1. **Scale on demand.** Make `ui` run exactly 3 replicas without editing YAML, then restore HPA control. *Check:* `K get statefulset ui` shows 3, then HPA reclaims it.
 2. **Zero-downtime rollout.** Give `ui` a `maxUnavailable: 0` strategy and change an environment variable. *Check:* no request failures while `K rollout status` completes.
 3. **Probe the probes.** Add a startup probe to `api` with a 30-second budget and prove the Pod becomes Ready only after it passes.
 4. **Break and fix DNS.** Change `cdn`'s Service selector to a label no Pod has, observe UI failures, then fix it. *Check:* dashboard loads again.
