@@ -87,7 +87,9 @@ All state is bind-mounted from the Linux host, the same idea as the bind mounts 
 
 ```text
 ${DATA_DIR}/kubernetes/k3s             -> /var/lib/rancher/k3s   (server: API state, manifests, TLS)
+${DATA_DIR}/kubernetes/k3s/server/cred -> /server-cred           (agents: clear own node-passwd entry on start)
 ${DATA_DIR}/kubernetes/k3s-agent-1..3  -> /var/lib/rancher/k3s   (each agent: containerd, local-path PV directories)
+${DATA_DIR}/kubernetes/k3s-agent-N/node -> /etc/rancher/node     (each agent: persisted node password)
 ${DATA_DIR}/kubernetes/<node>/log      -> /var/log                (per node; overrides the image VOLUME)
 ${DATA_DIR}/kubernetes/<node>/cni      -> /var/lib/cni            (per node; overrides the image VOLUME)
 ${DATA_DIR}/kubernetes/<node>/kubelet  -> /var/lib/kubelet        (per node; overrides the image VOLUME)
@@ -96,9 +98,12 @@ ${DATA_DIR}/kubernetes/k3s-config      -> /etc/rancher/k3s        (server: admin
 ${DATA_DIR}/kubernetes/kube/config     -> /kubeconfig/config and /.kube/config (read-only, the two UIs)
 ${DATA_DIR}/kubernetes/kubewall        -> /.kubewall              (KubeWall state)
 ./kubernetes/landscape.yaml            -> .../manifests/landscape.yaml   (read-only, from the repo)
+./kubernetes/agent-entrypoint.sh       -> /agent-entrypoint.sh   (agents: drop stale server password, then join)
 ```
 
-All of them use the long bind syntax, so Docker creates missing directories on first start; only the `landscape.yaml` file bind is strict, because a missing manifest should fail loudly.
+All of them use the long bind syntax, so Docker creates missing directories on first start; only the `landscape.yaml` and `agent-entrypoint.sh` file binds are strict, because a missing manifest or entrypoint should fail loudly.
+
+Agents start via `agent-entrypoint.sh`, which removes that agent's line from the server `node-passwd` file (with a directory lock so the three agents do not race), then runs `k3s agent`. Combined with the persisted `/etc/rancher/node` mount, a container recreate either reuses the same local password or registers a new one after the stale server entry was cleared — so you should not see `Node password rejected` after a normal `compose up --force-recreate`.
 
 The database pods use `volumeClaimTemplates` (one `local-path` PVC per pod, bound to the worker that scheduled it) for their data. The shared primary marker and backups cannot use a `ReadWriteOnce` local-path claim once the two database pods and up to five API pods can land on different workers, so `/shared` is a `hostPath` volume that all three agents bind to the same host directory; `lab-bootstrap` gives that directory to uid 1000 on every start. `docker compose down` and `up` keep the counter, the replica data and the backups. Deleting `${DATA_DIR}/kubernetes/k3s*` and `${DATA_DIR}/kubernetes/shared` is a full reset and cannot be undone. Because `local-path` PVs are node-bound, a database pod whose worker is removed cannot reschedule elsewhere until that worker returns or you delete its PVC.
 

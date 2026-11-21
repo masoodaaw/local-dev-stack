@@ -16,6 +16,7 @@ x-k3s-agent: &k3s-agent
       condition: service_started
     lab-bootstrap:
       condition: service_completed_successfully
+  entrypoint: ["/bin/sh", "/agent-entrypoint.sh"]
   environment:
     K3S_URL: https://k3s:6443
     K3S_TOKEN: ${K3S_LAB_TOKEN:-landscape-lab-cluster-token}
@@ -59,13 +60,25 @@ services:
     container_name: kubernetes-lab-k3s-agent-1
     <<: *k3s-agent
     hostname: k3s-agent-1
-    command: agent --node-name=k3s-agent-1
+    command: ["k3s-agent-1"]
     ports:
       - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
     volumes:
       - type: bind
+        source: ./kubernetes/agent-entrypoint.sh
+        target: /agent-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/server/cred
+        target: /server-cred
+      - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1
         target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-1/node
+        target: /etc/rancher/node
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1/log
         target: /var/log
@@ -82,13 +95,25 @@ services:
     container_name: kubernetes-lab-k3s-agent-2
     <<: *k3s-agent
     hostname: k3s-agent-2
-    command: agent --node-name=k3s-agent-2
+    command: ["k3s-agent-2"]
     ports:
       - "${K8S_LAB_PORT_2:-127.0.0.1:18081}:80"
     volumes:
       - type: bind
+        source: ./kubernetes/agent-entrypoint.sh
+        target: /agent-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/server/cred
+        target: /server-cred
+      - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2
         target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-2/node
+        target: /etc/rancher/node
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2/log
         target: /var/log
@@ -105,13 +130,25 @@ services:
     container_name: kubernetes-lab-k3s-agent-3
     <<: *k3s-agent
     hostname: k3s-agent-3
-    command: agent --node-name=k3s-agent-3
+    command: ["k3s-agent-3"]
     ports:
       - "${K8S_LAB_PORT_3:-127.0.0.1:18082}:80"
     volumes:
       - type: bind
+        source: ./kubernetes/agent-entrypoint.sh
+        target: /agent-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s/server/cred
+        target: /server-cred
+      - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3
         target: /var/lib/rancher/k3s
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/k3s-agent-3/node
+        target: /etc/rancher/node
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3/log
         target: /var/log
