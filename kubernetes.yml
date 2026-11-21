@@ -276,7 +276,12 @@ services:
     depends_on:
       lab-bootstrap:
         condition: service_completed_successfully
-    command: ["--listen=:7080", "--no-open-browser"]
+    # HOME=/ matches the image default so discovery uses /.kube and /.kubewall.
+    # Listen on [::]:7080 (KubeWall's preferred bind) so SSE works without TLS;
+    # plain --listen=:7080 breaks live data in the UI.
+    environment:
+      HOME: "/"
+    command: ["--listen=[::]:7080", "--no-open-browser"]
     ports:
       - "${KUBEWALL_PORT:-127.0.0.1:18085}:7080"
     volumes:
