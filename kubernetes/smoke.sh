@@ -173,7 +173,7 @@ DATA_DIR="${DATA_DIR%/}"
 
 if [ -n "${DATA_DIR:-}" ] && [ -d "$DATA_DIR/kubernetes" ]; then
   ok "data root exists: $DATA_DIR/kubernetes"
-  for dir in k3s k3s/log k3s/cni k3s/kubelet k3s/server/cred k3s-config \
+  for dir in k3s k3s/log k3s/cni k3s/kubelet k3s-config \
     k3s-agent-1/log k3s-agent-1/node k3s-agent-2/log k3s-agent-2/node \
     k3s-agent-3/log k3s-agent-3/node shared kube kubewall; do
     if [ -d "$DATA_DIR/kubernetes/$dir" ]; then

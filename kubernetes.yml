@@ -35,15 +35,23 @@ services:
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s
         target: /var/lib/rancher/k3s
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s/log
         target: /var/log
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s/cni
         target: /var/lib/cni
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s/kubelet
         target: /var/lib/kubelet
+        bind:
+          create_host_path: false
       - type: bind
         source: ./kubernetes/landscape.yaml
         target: /var/lib/rancher/k3s/server/manifests/landscape.yaml
@@ -53,6 +61,8 @@ services:
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-config
         target: /etc/rancher/k3s
+        bind:
+          create_host_path: false
     networks:
       - kubernetes-lab
 
@@ -71,26 +81,41 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${DATA_DIR}/kubernetes/k3s/server/cred
-        target: /server-cred
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /kubeconfig
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1
         target: /var/lib/rancher/k3s
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1/node
         target: /etc/rancher/node
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1/log
         target: /var/log
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1/cni
         target: /var/lib/cni
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-1/kubelet
         target: /var/lib/kubelet
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
+        bind:
+          create_host_path: false
   k3s-agent-2:
     container_name: kubernetes-lab-k3s-agent-2
     <<: *k3s-agent
@@ -106,26 +131,41 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${DATA_DIR}/kubernetes/k3s/server/cred
-        target: /server-cred
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /kubeconfig
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2
         target: /var/lib/rancher/k3s
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2/node
         target: /etc/rancher/node
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2/log
         target: /var/log
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2/cni
         target: /var/lib/cni
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-2/kubelet
         target: /var/lib/kubelet
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
+        bind:
+          create_host_path: false
   k3s-agent-3:
     container_name: kubernetes-lab-k3s-agent-3
     <<: *k3s-agent
@@ -141,26 +181,41 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ${DATA_DIR}/kubernetes/k3s/server/cred
-        target: /server-cred
+        source: ${DATA_DIR}/kubernetes/kube
+        target: /kubeconfig
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3
         target: /var/lib/rancher/k3s
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3/node
         target: /etc/rancher/node
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3/log
         target: /var/log
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3/cni
         target: /var/lib/cni
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-agent-3/kubelet
         target: /var/lib/kubelet
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
+        bind:
+          create_host_path: false
   lab-bootstrap:
     container_name: kubernetes-lab-bootstrap
     image: alpine:3.20.3
@@ -172,13 +227,19 @@ services:
       - type: bind
         source: ${DATA_DIR}/kubernetes/shared
         target: /shared
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/kube
         target: /kube
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s-config
         target: /k3s-config
         read_only: true
+        bind:
+          create_host_path: false
     command:
       - sh
       - -c
@@ -206,6 +267,8 @@ services:
         source: ${DATA_DIR}/kubernetes/kube
         target: /kubeconfig
         read_only: true
+        bind:
+          create_host_path: false
     networks:
       - kubernetes-lab
 
@@ -224,10 +287,14 @@ services:
       - type: bind
         source: ${DATA_DIR}/kubernetes/kubewall
         target: /.kubewall
+        bind:
+          create_host_path: false
       - type: bind
         source: ${DATA_DIR}/kubernetes/kube
         target: /.kube
         read_only: true
+        bind:
+          create_host_path: false
     networks:
       - kubernetes-lab
 

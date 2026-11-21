@@ -1,33 +1,30 @@
 #!/bin/sh
-# Clear this agent's stale server-side node password, then start k3s agent.
-# /etc/rancher/node is bind-mounted so a recreate keeps (or freshly creates) the
-# local password; wiping the matching server entry lets either case join.
+# Drop this agent's stale node-password Secret, then start k3s agent.
+# K3s stores the hash in kube-system/<name>.node-password.k3s (not only the
+# legacy server cred file). /etc/rancher/node is bind-mounted so a recreate
+# keeps or freshly creates the local password; deleting the Secret lets either
+# case register successfully.
 set -e
 
 name="${1:?usage: agent-entrypoint.sh <node-name>}"
 shift
 
-cred_dir=/server-cred
-passwd_file="${cred_dir}/node-passwd"
-lock_dir="${cred_dir}/node-passwd.lock"
+export KUBECONFIG=/kubeconfig/config
 
-if [ -f "$passwd_file" ]; then
-  i=0
-  while [ "$i" -lt 50 ]; do
-    if mkdir "$lock_dir" 2>/dev/null; then
-      # Keep every line that is not this agent (format: name,password).
-      grep -v "^${name}," "$passwd_file" > /tmp/node-passwd || true
-      cat /tmp/node-passwd > "$passwd_file"
-      rmdir "$lock_dir"
-      break
-    fi
-    i=$((i + 1))
-    # Stale lock from a killed agent: drop it and retry.
-    if [ "$i" -eq 40 ]; then
-      rmdir "$lock_dir" 2>/dev/null || true
-    fi
-    sleep 0.25
-  done
+i=0
+while [ "$i" -lt 90 ]; do
+  if [ -s "$KUBECONFIG" ] && k3s kubectl get --raw=/readyz >/dev/null 2>&1; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 2
+done
+
+if k3s kubectl get --raw=/readyz >/dev/null 2>&1; then
+  k3s kubectl delete secret -n kube-system "${name}.node-password.k3s" --ignore-not-found=true
+  echo "agent-entrypoint: cleared kube-system/${name}.node-password.k3s (if present)"
+else
+  echo "agent-entrypoint: warning: API not ready; starting agent without clearing node-password Secret" >&2
 fi
 
 exec k3s agent --node-name="$name" "$@"
