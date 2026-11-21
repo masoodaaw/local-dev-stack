@@ -1,7 +1,6 @@
 #!/bin/sh
-# Start the k3s agent. Stale node-password Secrets are cleared by lab-bootstrap
-# before agents are allowed to start; /etc/rancher/node is bind-mounted so the
-# local password survives container recreates.
+# Start the k3s agent with a fixed node name. /etc/rancher/node is bind-mounted
+# so the local node password survives container recreates.
 set -e
 
 name="${1:?usage: agent-entrypoint.sh <node-name>}"

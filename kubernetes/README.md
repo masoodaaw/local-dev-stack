@@ -28,7 +28,7 @@ Every workload is a `StatefulSet` with `podManagementPolicy: Parallel`, so pods 
 docker compose -f kubernetes.yml up -d
 ```
 
-`lab-bootstrap` is a one-shot service that runs after the server and gates the agents and UIs. It waits until the server has written `/etc/rancher/k3s/k3s.yaml` (persisted at `${DATA_DIR}/kubernetes/k3s-config`), sets `${DATA_DIR}/kubernetes/shared` to uid 1000 for the database and API pods, writes `${DATA_DIR}/kubernetes/kube/config` with the API address retargeted from `https://127.0.0.1:6443` to `https://k3s:6443`, then deletes any stale `kube-system/<agent>.node-password.k3s` Secrets so agents can rejoin after a recreate. The three agents and both UIs declare `depends_on: lab-bootstrap: condition: service_completed_successfully`, so no node joins before `/shared` is writable and the password Secrets are cleared.
+`lab-bootstrap` is a one-shot service that runs after the server and gates the agents and UIs. It waits until the server has written `/etc/rancher/k3s/k3s.yaml` (persisted at `${DATA_DIR}/kubernetes/k3s-config`), sets `${DATA_DIR}/kubernetes/shared` to uid 1000 for the database and API pods, then writes `${DATA_DIR}/kubernetes/kube/config` with the API address retargeted from `https://127.0.0.1:6443` to `https://k3s:6443`. The three agents and both UIs declare `depends_on: lab-bootstrap: condition: service_completed_successfully`, so no node joins before `/shared` is writable and neither UI starts with a missing kubeconfig. Agent node passwords are persisted under `${DATA_DIR}/kubernetes/k3s-agent-N/node`; if an agent still fails with `Node password rejected` after a recreate, delete `kube-system/<name>.node-password.k3s` on the server and recreate that agent.
 
 Check it with:
 
@@ -106,10 +106,12 @@ All of them use the long bind syntax with `create_host_path: false`, so a missin
 mkdir -p "$DATA_DIR"/kubernetes/{k3s/{log,cni,kubelet},k3s-config,k3s-agent-1/{node,log,cni,kubelet},k3s-agent-2/{node,log,cni,kubelet},k3s-agent-3/{node,log,cni,kubelet},shared,kube,kubewall}
 ```
 
-`lab-bootstrap` clears each agent's `kube-system/<node>.node-password.k3s` Secret before agents start. Combined with the persisted `/etc/rancher/node` mount, recreating agents after bootstrap lets them rejoin with the same or a new local password. When you recreate agents, also recreate bootstrap so the Secrets are cleared again:
+With the persisted `/etc/rancher/node` mount, agent recreates reuse the same local password and rejoin cleanly. If you wiped only the agent `node/` dirs (or still see `Node password rejected`), clear the server Secrets then recreate:
 
 ```sh
-docker compose -f kubernetes.yml up -d --force-recreate lab-bootstrap k3s-agent-1 k3s-agent-2 k3s-agent-3
+docker compose -f kubernetes.yml exec k3s kubectl delete secret -n kube-system \
+  k3s-agent-1.node-password.k3s k3s-agent-2.node-password.k3s k3s-agent-3.node-password.k3s --ignore-not-found
+docker compose -f kubernetes.yml up -d --force-recreate k3s-agent-1 k3s-agent-2 k3s-agent-3
 ```
 
 
