@@ -190,7 +190,8 @@ element('recover').addEventListener('click', async () => {
 });
 const uiHost = `${location.protocol}//${location.hostname}`;
 element('headlamp-link').href = `${uiHost}:18084/`;
-element('kubewall-link').href = `${uiHost}:18085/`;
+// KubeWall serves HTTPS (SSE requires TLS off localhost); accept the self-signed warning.
+element('kubewall-link').href = `https://${location.hostname}:18085/`;
 
 refresh();
 setInterval(refresh, 5000);

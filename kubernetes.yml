@@ -268,6 +268,29 @@ services:
     networks:
       - kubernetes-lab
 
+  # KubeWall needs HTTPS for Server-Sent Events when opened as http(s)://masood-hp:18085/
+  # (plain HTTP works for the shell UI but cluster data streams stay empty). Headlamp
+  # does not use SSE the same way, which is why it still works over HTTP.
+  kubewall-certs:
+    container_name: kubernetes-lab-kubewall-certs
+    image: alpine:3.20.3
+    restart: "no"
+    environment:
+      KUBEWALL_TLS_HOSTS: ${KUBEWALL_TLS_HOSTS:-localhost,masood-hp,127.0.0.1}
+    volumes:
+      - type: bind
+        source: ./kubernetes/kubewall-certs.sh
+        target: /kubewall-certs.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes/kubewall/certs
+        target: /certs
+        bind:
+          create_host_path: false
+    command: ["sh", "/kubewall-certs.sh", "/certs"]
+
   kubewall:
     container_name: kubernetes-lab-kubewall
     image: ghcr.io/kubewall/kubewall:0.0.23
@@ -276,12 +299,15 @@ services:
     depends_on:
       lab-bootstrap:
         condition: service_completed_successfully
-    # HOME=/ matches the image default so discovery uses /.kube and /.kubewall.
-    # Listen on [::]:7080 (KubeWall's preferred bind) so SSE works without TLS;
-    # plain --listen=:7080 breaks live data in the UI.
+      kubewall-certs:
+        condition: service_completed_successfully
     environment:
       HOME: "/"
-    command: ["--listen=[::]:7080", "--no-open-browser"]
+    command:
+      - "--listen=[::]:7080"
+      - "--no-open-browser"
+      - "--certFile=/.kubewall/certs/tls.crt"
+      - "--keyFile=/.kubewall/certs/tls.key"
     ports:
       - "${KUBEWALL_PORT:-127.0.0.1:18085}:7080"
     volumes:

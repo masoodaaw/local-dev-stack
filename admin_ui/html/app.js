@@ -59,7 +59,7 @@ const groups = [
     { id: "k8s-cdn", container: "k8s-k3s", name: "CDN stats", note: "Cache hits, hit ratio and object count (JSON API)", ports: [18080], links: [[18080, "/_cdn/stats", "CDN stats (API)"]] },
     { id: "k8s-status", container: "k8s-k3s", name: "Cluster status", note: "Pods, HPAs, metrics, events and database state (JSON API)", ports: [18080], links: [[18080, "/api/status", "Cluster status (API)"]] },
     { id: "k8s-headlamp", container: "k8s-headlamp", name: "Headlamp", note: "Kubernetes web UI on the lab kubeconfig (18084)", ports: [18084], links: [[18084, "/", "Open Headlamp"]] },
-    { id: "k8s-kubewall", container: "k8s-kubewall", name: "KubeWall", note: "Multi-cluster dashboard on the lab kubeconfig (18085)", ports: [18085], links: [[18085, "/", "Open KubeWall"]] },
+    { id: "k8s-kubewall", container: "k8s-kubewall", name: "KubeWall", note: "Multi-cluster dashboard (HTTPS on 18085; accept self-signed cert)", ports: [18085], links: [[18085, "/", "Open KubeWall (use https://)"]] },
     { id: "k8s-kubectl", container: "k8s-k3s", name: "kubectl access", note: "API server on 127.0.0.1:16443; run docker compose exec k3s kubectl get nodes", ports: [16443] }
   ] }
 ];

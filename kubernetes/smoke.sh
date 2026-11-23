@@ -266,10 +266,11 @@ case "$code" in
   *) bad "Headlamp returned ${code:-no-response} on port $HEADLAMP_PORT" ;;
 esac
 
-code="$(fetch "$KUBEWALL_PORT" "/" "$tmpdir/kubewall.html")"
+# KubeWall is HTTPS (SSE needs TLS off localhost); accept the lab self-signed cert.
+code="$(curl -sk -o "$tmpdir/kubewall.html" -w '%{http_code}' --max-time 10 "https://127.0.0.1:$KUBEWALL_PORT/" 2>/dev/null || true)"
 case "$code" in
-  2* | 3*) ok "KubeWall answers on 127.0.0.1:$KUBEWALL_PORT (${code})" ;;
-  *) bad "KubeWall returned ${code:-no-response} on port $KUBEWALL_PORT" ;;
+  2* | 3*) ok "KubeWall answers on https://127.0.0.1:$KUBEWALL_PORT (${code})" ;;
+  *) bad "KubeWall returned ${code:-no-response} on https://127.0.0.1:$KUBEWALL_PORT" ;;
 esac
 
 hdr "Summary"

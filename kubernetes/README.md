@@ -75,7 +75,7 @@ The ingress is published from the workers, not the control plane: the control pl
 | UI | Container | Port (loopback) | Notes |
 | --- | --- | --- | --- |
 | [Headlamp](https://headlamp.dev/) | `headlamp` | `127.0.0.1:18084` | `ghcr.io/headlamp-k8s/headlamp:v0.46.0` started with `-kubeconfig=/kubeconfig/config`; `${DATA_DIR}/kubernetes/kube` is mounted at `/kubeconfig` |
-| [KubeWall](https://github.com/kubewall/kubewall) | `kubewall` | `127.0.0.1:18085` | `ghcr.io/kubewall/kubewall:0.0.23` with `${DATA_DIR}/kubernetes/kube` at `/.kube` and its state in `/.kubewall` |
+| [KubeWall](https://github.com/kubewall/kubewall) | `kubewall` | `127.0.0.1:18085` (**HTTPS**) | `ghcr.io/kubewall/kubewall:0.0.23` with kubeconfig at `/.kube`, state at `/.kubewall`, self-signed TLS under `/.kubewall/certs` (SSE needs HTTPS when opened via a LAN hostname such as `https://masood-hp:18085/`) |
 
 Every image is pinned to a version tag (`rancher/k3s:v1.31.6-k3s1`, `headlamp:v0.46.0`, `kubewall:0.0.23`), so a fresh `docker compose up` resolves the same images. Both UIs mount `${DATA_DIR}/kubernetes/kube` (containing `config`) read-only and reach the API at `https://k3s:6443` over the lab network. That file is the cluster-admin kubeconfig, so **neither UI has authentication** — they are bound to loopback, exactly like the rest of the lab; do not publish them. Override the ports with `HEADLAMP_PORT` / `KUBEWALL_PORT`. The control room links both, and the main container dashboard lists them too.
 
@@ -96,6 +96,8 @@ ${DATA_DIR}/kubernetes/shared          -> /shared                 (bind-mounted 
 ${DATA_DIR}/kubernetes/k3s-config      -> /etc/rancher/k3s        (server: admin kubeconfig)
 ${DATA_DIR}/kubernetes/kube/config     -> /kubeconfig/config     (bootstrap output; Headlamp and KubeWall)
 ${DATA_DIR}/kubernetes/kubewall        -> /.kubewall              (KubeWall state)
+${DATA_DIR}/kubernetes/kubewall/certs  -> /.kubewall/certs        (KubeWall self-signed TLS; created by kubewall-certs)
+./kubernetes/kubewall-certs.sh         -> /kubewall-certs.sh      (one-shot cert generator)
 ./kubernetes/landscape.yaml            -> .../manifests/landscape.yaml   (read-only, from the repo)
 ./kubernetes/agent-entrypoint.sh       -> /agent-entrypoint.sh   (agents: run `k3s agent` with a fixed node name)
 ```
@@ -103,7 +105,7 @@ ${DATA_DIR}/kubernetes/kubewall        -> /.kubewall              (KubeWall stat
 All of them use the long bind syntax with `create_host_path: false`, so a missing host path or repo file (`landscape.yaml`, `agent-entrypoint.sh`) fails loudly instead of Docker inventing empty directories. Create them once before the first start, for example:
 
 ```sh
-mkdir -p "$DATA_DIR"/kubernetes/{k3s/{log,cni,kubelet},k3s-config,k3s-agent-1/{node,log,cni,kubelet},k3s-agent-2/{node,log,cni,kubelet},k3s-agent-3/{node,log,cni,kubelet},shared,kube,kubewall}
+mkdir -p "$DATA_DIR"/kubernetes/{k3s/{log,cni,kubelet},k3s-config,k3s-agent-1/{node,log,cni,kubelet},k3s-agent-2/{node,log,cni,kubelet},k3s-agent-3/{node,log,cni,kubelet},shared,kube,kubewall/certs}
 ```
 
 With the persisted `/etc/rancher/node` mount, agent recreates reuse the same local password and rejoin cleanly. If you wiped only the agent `node/` dirs (or still see `Node password rejected`), clear the server Secrets then recreate:
