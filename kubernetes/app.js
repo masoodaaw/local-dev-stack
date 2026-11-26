@@ -13,7 +13,10 @@ const port = Number(process.env.PORT || 8080);
 const namespace = 'landscape-lab';
 const label = encodeURIComponent('app.kubernetes.io/part-of=landscape-lab');
 const serviceAccount = '/var/run/secrets/kubernetes.io/serviceaccount';
-const podName = process.env.HOSTNAME || 'local';
+const podName = process.env.POD_NAME || process.env.HOSTNAME || 'local';
+const nodeName = process.env.NODE_NAME || '';
+const podOrdinalMatch = podName.match(/^(?:gateway|loadbalancer|cdn|ui|api|database|traffic)-(\d+)$/);
+const podOrdinal = podOrdinalMatch ? podOrdinalMatch[1] : '';
 const sharedDirectory = process.env.SHARED_DIR || '/shared';
 const dataDirectory = process.env.DATA_DIR || '/data';
 const componentTimeout = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);
@@ -21,13 +24,45 @@ const hopByHop = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'pro
 
 let workCalls = 0;
 
-function send(response, status, value, type = 'application/json; charset=utf-8', headers = {}) {
+function headerValue(value) {
+  return Array.isArray(value) ? value.join(',') : String(value);
+}
+
+function pickTraceHeaders(headers = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const name = key.toLowerCase();
+    if (value === undefined) continue;
+    if (name === 'x-landscape-path' || name === 'x-cdn-cache' || name.startsWith('x-served-by-')) {
+      out[name] = headerValue(value);
+    }
+  }
+  return out;
+}
+
+// Identity + hop chain for scaled StatefulSet pods. Proxies forward upstream
+// x-served-by-* / x-landscape-path and append this pod so the browser sees the full path.
+function responseHeaders(upstream = {}, extra = {}) {
+  const trace = pickTraceHeaders(upstream);
+  const prior = trace['x-landscape-path'];
+  return {
+    ...trace,
+    'x-pod-name': podName,
+    'x-pod-role': role,
+    ...(podOrdinal !== '' ? { 'x-pod-ordinal': podOrdinal } : {}),
+    ...(nodeName ? { 'x-pod-node': nodeName } : {}),
+    [`x-served-by-${role}`]: podName,
+    'x-landscape-path': prior ? `${prior},${podName}` : podName,
+    ...extra
+  };
+}
+
+function send(response, status, value, type = 'application/json; charset=utf-8', headers = {}, upstream = {}) {
   response.writeHead(status, {
     'content-type': type,
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
-    'x-served-by': `${role}/${podName}`,
-    ...headers
+    ...responseHeaders(upstream, headers)
   });
   response.end(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value));
 }
@@ -153,7 +188,7 @@ async function proxy(requestObject, response, stats, options) {
     send(response, result.status, result.data, result.headers['content-type'] || 'application/octet-stream', {
       'cache-control': result.headers['cache-control'] || 'no-store',
       'x-cdn-cache': result.headers['x-cdn-cache'] || 'BYPASS'
-    });
+    }, result.headers);
     return result.status;
   } catch (error) {
     send(response, 502, { error: `Upstream ${options.hostname} unavailable: ${error.message}` });
@@ -245,7 +280,7 @@ function createCdn(stats) {
       if (entry && entry.expires > Date.now()) {
         hits += 1;
         bytesSaved += entry.size;
-        send(response, 200, entry.data, entry.type, { 'cache-control': 'no-store', 'x-cdn-cache': 'HIT' });
+        send(response, 200, entry.data, entry.type, { 'cache-control': 'no-store', 'x-cdn-cache': 'HIT' }, entry.headers || {});
         return 200;
       }
       misses += 1;
@@ -258,10 +293,16 @@ function createCdn(stats) {
       ok = result.status < 500;
       const type = result.headers['content-type'] || 'application/octet-stream';
       if (cacheable && result.status === 200) {
-        cache.set(requestObject.url, { data: result.data, type, expires: Date.now() + ttl, size: Buffer.byteLength(result.data) });
+        cache.set(requestObject.url, {
+          data: result.data,
+          type,
+          expires: Date.now() + ttl,
+          size: Buffer.byteLength(result.data),
+          headers: pickTraceHeaders(result.headers)
+        });
         if (cache.size > 50) cache.delete(cache.keys().next().value);
       }
-      send(response, result.status, result.data, type, { 'cache-control': 'no-store', 'x-cdn-cache': 'MISS' });
+      send(response, result.status, result.data, type, { 'cache-control': 'no-store', 'x-cdn-cache': 'MISS' }, result.headers);
       return result.status;
     } catch (error) {
       send(response, 502, { error: `UI unavailable: ${error.message}` });
@@ -294,7 +335,7 @@ function createUi() {
         origin: requestObject.headers.origin || '',
         'content-type': requestObject.headers['content-type'] || ''
       }, body, target === '/api/status' ? 20000 : 8000);
-      send(response, result.status, result.data, result.headers['content-type'] || 'application/json; charset=utf-8');
+      send(response, result.status, result.data, result.headers['content-type'] || 'application/json; charset=utf-8', {}, result.headers);
       return result.status;
     } catch (error) {
       send(response, 502, { error: `API unavailable: ${error.message}` });

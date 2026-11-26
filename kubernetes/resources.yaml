@@ -346,7 +346,12 @@ spec:
         - name: gateway
           image: node:22-alpine
           command: ["node", "/app/app.js"]
-          env: [{name: ROLE, value: gateway}]
+          env:
+            - {name: ROLE, value: gateway}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
@@ -382,7 +387,12 @@ spec:
         - name: loadbalancer
           image: node:22-alpine
           command: ["node", "/app/app.js"]
-          env: [{name: ROLE, value: loadbalancer}]
+          env:
+            - {name: ROLE, value: loadbalancer}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
@@ -418,7 +428,12 @@ spec:
         - name: cdn
           image: node:22-alpine
           command: ["node", "/app/app.js"]
-          env: [{name: ROLE, value: cdn}]
+          env:
+            - {name: ROLE, value: cdn}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
@@ -454,11 +469,16 @@ spec:
         - name: ui
           image: node:22-alpine
           command: ["node", "/app/app.js"]
-          env: [{name: ROLE, value: ui}]
+          env:
+            - {name: ROLE, value: ui}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
-          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: 500m, memory: 1Gi}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
       volumes: [{name: app, configMap: {name: landscape-app}}]
@@ -493,10 +513,14 @@ spec:
           env:
             - {name: ROLE, value: api}
             - {name: SHARED_DIR, value: /shared}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 10, timeoutSeconds: 3}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15, timeoutSeconds: 5, failureThreshold: 5}
-          resources: {requests: {cpu: 100m, memory: 64Mi}, limits: {cpu: 500m, memory: 128Mi}}
+          resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: 500m, memory: 1Gi}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts:
             - {name: app, mountPath: /app, readOnly: true}
@@ -533,7 +557,12 @@ spec:
         - name: traffic
           image: node:22-alpine
           command: ["node", "/app/app.js"]
-          env: [{name: ROLE, value: traffic}]
+          env:
+            - {name: ROLE, value: traffic}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 96Mi}}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts: [{name: app, mountPath: /app, readOnly: true}]
@@ -570,6 +599,10 @@ spec:
             - {name: ROLE, value: database}
             - {name: DATA_DIR, value: /data}
             - {name: SHARED_DIR, value: /shared}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
           ports: [{name: http, containerPort: 8080}]
           readinessProbe: {httpGet: {path: /health, port: 8080}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /health, port: 8080}, initialDelaySeconds: 15, periodSeconds: 15}
