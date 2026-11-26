@@ -86,22 +86,27 @@ services:
     command: >
       sh -c "rm -rf /data/*.pid /data/db/*.pid /data/db/.s.PGSQL* /data/.s.PGSQL* && chmod -R 700 /data"    
   
-  init-prom-wal:
-    image: alpine:latest
-    container_name: "init-prom-wal"
-    user: "0:0"
-    volumes:
-      - type: bind
-        source: ${DATA_DIR}/prometheus
-        target: /prometheus
-        bind:
-          create_host_path: false
-    command: sh -c "rm -rf /prometheus/wal/* /prometheus/chunks_head/*"
-  
-  
   # ==========================================
   # 1. PRIMARY DATABASES & STORAGE ENGINES
   # ==========================================
+  init-postgres-config:
+    image: alpine:latest
+    container_name: "init-postgres-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./init-sonar-db.sql
+        target: /src/init-sonar-db.sql
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/init-sonar-db.sql /data/init-sonar-db.sql"
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: dev-postgres
@@ -140,10 +145,13 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./init-sonar-db.sql
+        source: ${DATA_DIR}/init-sonar-db.sql
         target: /docker-entrypoint-initdb.d/init-sonar-db.sql
         bind:
           create_host_path: false
+    depends_on:
+      init-postgres-config:
+        condition: service_completed_successfully
     networks:
       - dev-network
 
@@ -652,6 +660,24 @@ services:
   # ==========================================
   # 5. OPENTELEMETRY & OBSERVABILITY
   # ==========================================
+  init-otel-config:
+    image: alpine:latest
+    container_name: "init-otel-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./otel-config.yaml
+        target: /src/otel-config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/otel-config.yaml /data/otel-config.yaml"
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     user: "0:0"
@@ -661,7 +687,7 @@ services:
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - type: bind
-        source: ./otel-config.yaml
+        source: ${DATA_DIR}/otel-config.yaml
         target: /etc/otel-collector-config.yaml
         bind:
           create_host_path: false
@@ -689,8 +715,12 @@ services:
       - "24224:24224"
       - "8889:8889"
     depends_on:
-      - jaeger
-      - loki
+      init-otel-config:
+        condition: service_completed_successfully
+      jaeger:
+        condition: service_started
+      loki:
+        condition: service_started
     networks:
       - dev-network
 
@@ -709,6 +739,31 @@ services:
           create_host_path: false
     networks:
       - dev-network
+
+  init-prom-wal:
+    image: alpine:latest
+    container_name: "init-prom-wal"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./prometheus.yml
+        target: /src/prometheus.yml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/prometheus
+        target: /prometheus
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}
+        target: /data
+        bind:
+          create_host_path: false
+    command: >
+      sh -c "rm -rf /prometheus/wal/* /prometheus/chunks_head/* &&
+      cp -a /src/prometheus.yml /data/prometheus.yml"
 
   prometheus:
     image: prom/prometheus:latest
@@ -729,7 +784,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./prometheus.yml
+        source: ${DATA_DIR}/prometheus.yml
         target: /etc/prometheus/prometheus.yml
         read_only: true
         bind:
@@ -801,22 +856,71 @@ services:
     networks:
       - dev-network
 
+  init-container-status-exporter-config:
+    image: alpine:latest
+    container_name: "init-container-status-exporter-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./telegraf-docker-status.conf
+        target: /src/telegraf-docker-status.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/telegraf-docker-status.conf /data/telegraf-docker-status.conf"
+
   container-status-exporter:
     image: telegraf:1.40.2
     container_name: dev-container-status-exporter
     restart: unless-stopped
     logging: *default-logging
     depends_on:
-      - docker-socket-proxy
+      docker-socket-proxy:
+        condition: service_started
+      init-container-status-exporter-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./telegraf-docker-status.conf
+        source: ${DATA_DIR}/telegraf-docker-status.conf
         target: /etc/telegraf/telegraf.conf
         read_only: true
         bind:
           create_host_path: false
     networks:
       - dev-network
+
+  init-grafana-config:
+    image: alpine:latest
+    container_name: "init-grafana-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./grafana
+        target: /src/grafana
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/grafana
+        target: /data/grafana
+        bind:
+          create_host_path: false
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /data/grafana/provisioning/datasources \
+                 /data/grafana/provisioning/dashboards \
+                 /data/grafana/dashboards
+        cp -a /src/grafana/provisioning/datasources/. /data/grafana/provisioning/datasources/
+        cp -a /src/grafana/provisioning/dashboards/. /data/grafana/provisioning/dashboards/
+        cp -a /src/grafana/dashboards/. /data/grafana/dashboards/
 
   grafana:
     image: grafana/grafana:latest
@@ -828,6 +932,9 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${DEV_PASS}
+    depends_on:
+      init-grafana-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ${DATA_DIR}/grafana
@@ -835,25 +942,43 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./grafana/provisioning/datasources
+        source: ${DATA_DIR}/grafana/provisioning/datasources
         target: /etc/grafana/provisioning/datasources
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: ./grafana/provisioning/dashboards
+        source: ${DATA_DIR}/grafana/provisioning/dashboards
         target: /etc/grafana/provisioning/dashboards
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: ./grafana/dashboards
+        source: ${DATA_DIR}/grafana/dashboards
         target: /var/lib/grafana/dashboards
         read_only: true
         bind:
           create_host_path: false
     networks:
       - dev-network
+
+  init-loki-config:
+    image: alpine:latest
+    container_name: "init-loki-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./loki-config.yaml
+        target: /src/loki-config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/loki-config.yaml /data/loki-config.yaml"
 
   loki:
     image: grafana/loki:3.5.0
@@ -865,9 +990,12 @@ services:
     command: ["-config.file=/etc/loki/config.yaml"]
     ports:
       - "3100:3100"
+    depends_on:
+      init-loki-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./loki-config.yaml
+        source: ${DATA_DIR}/loki-config.yaml
         target: /etc/loki/config.yaml
         read_only: true
         bind:
@@ -883,15 +1011,38 @@ services:
   # ==========================================
   # 6. MANAGEMENT GUIs & DASHBOARDS
   # ==========================================
+  init-dashboard-config:
+    image: alpine:latest
+    container_name: "init-dashboard-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./admin_ui/html
+        target: /src/admin_ui/html
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/admin_ui
+        target: /data/admin_ui
+        bind:
+          create_host_path: false
+    command: >
+      sh -c "mkdir -p /data/admin_ui/html &&
+      cp -a /src/admin_ui/html/. /data/admin_ui/html/"
+
   dashboard:
     image: nginx:stable-alpine
     container_name: dev-dashboard
     restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      init-dashboard-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./admin_ui/html
+        source: ${DATA_DIR}/admin_ui/html
         target: /usr/share/nginx/html
         read_only: true
         bind:

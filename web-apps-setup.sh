@@ -13,13 +13,10 @@ echo "Target owner   : $OWNER_UID:$OWNER_GID"
 
 # 1. Create directory structures
 sudo mkdir -p \
-  "$REPO_DIR/nginx/conf.d" \
   "$REPO_DIR/default-site" \
   "$DATA_DIR/ddclient" \
-  "$DATA_DIR/nginx/logs" \
-  "$DATA_DIR/certbot/conf" \
-  "$DATA_DIR/certbot/www" \
-  "$DATA_DIR/certbot/logs" \
+  "$DATA_DIR/nginx-proxy-manager/data" \
+  "$DATA_DIR/nginx-proxy-manager/letsencrypt" \
   "$DATA_DIR/site1-data" \
   "$DATA_DIR/site2-data"
 
@@ -30,44 +27,7 @@ COMPOSE_FILE=web-apps.yml
 EOF
 fi
 
-# 3. Create Nginx shared SSL parameters
-if [ ! -f "$REPO_DIR/nginx/ssl-params.conf" ]; then
-  cat << 'EOF' | sudo tee "$REPO_DIR/nginx/ssl-params.conf" > /dev/null
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_prefer_server_ciphers off;
-ssl_session_cache shared:SSL:10m;
-ssl_session_timeout 1d;
-EOF
-fi
-
-# 4. Create starter HTTP Nginx config (use before issuing initial SSL certs)
-if [ ! -f "$REPO_DIR/nginx/conf.d/sites.conf" ]; then
-  cat << 'EOF' | sudo tee "$REPO_DIR/nginx/conf.d/sites.conf" > /dev/null
-resolver 127.0.0.11 valid=10s;
-
-# Default catch-all server for unconfigured domains
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        set $upstream_default http://default-app:80;
-        proxy_pass $upstream_default;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-EOF
-fi
-
-# 5. Create user-friendly default fallback webpage
+# 3. Create user-friendly default fallback webpage
 if [ ! -f "$REPO_DIR/default-site/index.html" ]; then
   cat << 'EOF' | sudo tee "$REPO_DIR/default-site/index.html" > /dev/null
 <!DOCTYPE html>
@@ -121,7 +81,7 @@ if [ ! -f "$REPO_DIR/default-site/index.html" ]; then
 EOF
 fi
 
-# 6. Create placeholder index.html files for Site 1 and Site 2
+# 4. Create placeholder index.html files for Site 1 and Site 2
 if [ ! -f "$DATA_DIR/site1-data/index.html" ]; then
   echo "<h1>Site 1 Online (Load Balanced)</h1>" | sudo tee "$DATA_DIR/site1-data/index.html" > /dev/null
 fi
@@ -130,41 +90,26 @@ if [ ! -f "$DATA_DIR/site2-data/index.html" ]; then
   echo "<h1>Site 2 Online</h1>" | sudo tee "$DATA_DIR/site2-data/index.html" > /dev/null
 fi
 
-# 7. Create starter ddclient.conf
+# 5. Create starter ddclient.conf (unused by Compose; active config comes from .env)
 if [ ! -f "$DATA_DIR/ddclient/ddclient.conf" ]; then
   cat << 'EOF' | sudo tee "$DATA_DIR/ddclient/ddclient.conf" > /dev/null
+# Placeholder only. web-apps.yml renders ddclient config from .env.
 daemon=300
 syslog=yes
 ssl=yes
-use=web, web=checkip.dyndns.com/
-
-# Replace with your DNS provider settings
-protocol=cloudflare
-zone=domainA.com
-ttl=1
-login=token
-password=YOUR_CLOUDFLARE_API_TOKEN
-domainA.com, *.domainA.com
 EOF
 fi
 
-# 8. Create starter cloudflare.ini for Certbot DNS-01 wildcard certs
-if [ ! -f "$DATA_DIR/certbot/cloudflare.ini" ]; then
-  cat << 'EOF' | sudo tee "$DATA_DIR/certbot/cloudflare.ini" > /dev/null
-dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
-EOF
-fi
-
-# 9. Set ownership and strict permissions on secrets
+# 6. Set ownership
 sudo chown -R "$OWNER_UID:$OWNER_GID" "$REPO_DIR" "$DATA_DIR"
-chmod 600 "$DATA_DIR/certbot/cloudflare.ini" "$DATA_DIR/ddclient/ddclient.conf"
+chmod 600 "$DATA_DIR/ddclient/ddclient.conf" 2>/dev/null || true
 
 echo ""
 echo "=== Setup Complete ==="
 echo "Next steps:"
-echo "1. Save your compose file to: $REPO_DIR/web-apps.yml"
-echo "2. Add your API tokens to: $DATA_DIR/ddclient/ddclient.conf and $DATA_DIR/certbot/cloudflare.ini"
-echo "3. Issue wildcard certs: cd $REPO_DIR && docker compose run --rm certbot certonly --dns-cloudflare --dns-cloudflare-credentials /cloudflare.ini -d domainA.com -d '*.domainA.com'"
-echo "4. Update $REPO_DIR/nginx/conf.d/sites.conf with your HTTPS server blocks"
-echo "5. Start the stack: cd $REPO_DIR && docker compose -f web-apps.yml up -d"
+echo "1. Configure DYNV6_* in $REPO_DIR/.env"
+echo "2. Ensure docker network exists: docker network create dev-network"
+echo "3. Start the stack: cd $REPO_DIR && docker compose -f web-apps.yml up -d"
+echo "4. Open Nginx Proxy Manager at http://127.0.0.1:81 (admin@example.com / changeme)"
+echo "5. Add Proxy Hosts pointing at default-app:80, site1-app:80, or site2-app:80"
 

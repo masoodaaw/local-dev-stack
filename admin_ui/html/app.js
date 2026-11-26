@@ -3,6 +3,7 @@
 const groups = [
   { name: "Management & administration", icon: "sliders", services: [
     { id: "dashboard", container: "dev-dashboard", name: "Service directory", note: "Nginx", self: true, links: [[null, "/", "Directory"]] },
+    { id: "Portainer.io", container: "portainer", name: "Containers Admin", note: "Portainer.io", ports: [9443], links: [[9443, "/", "Containers Admin", "https"]] },
     { id: "adminer", container: "dev-adminer", name: "Adminer", note: "SQL database administration", ports: [8088], links: [[8088, "/", "Open Adminer"]] },
     { id: "pgadmin", container: "dev-pgadmin", name: "pgAdmin", note: "PostgreSQL administration", ports: [5050], links: [[5050, "/", "Open pgAdmin"]] },
     { id: "redis-insight", container: "dev-redis-insight", name: "Redis Insight", note: "Redis browser", ports: [5540], links: [[5540, "/", "Open Redis Insight"]] },
@@ -46,11 +47,29 @@ const groups = [
     { id: "rabbitmq-3", container: "dev-rabbitmq-3", name: "RabbitMQ node 3", note: "AMQP only; management port not published", ports: [5674] }
   ] },
   { name: "Initialization", icon: "gear", services: [
-    { id: "init-sonar-permissions", container: "init-sonar-perms", name: "SonarQube permissions", note: "One-shot initialization; no web interface" },
-    { id: "init-cosmos-permissions", container: "init-cosmos-perms", name: "Cosmos DB permissions", note: "One-shot initialization; no web interface" },
-    { id: "init-prom-wal", container: "init-prom-wal", name: "Prometheus WAL initialization", note: "One-shot initialization; no web interface" }
+    { id: "init-sonar-permissions", container: "init-sonar-perms", name: "SonarQube permissions", note: "For dev-sonarqube. One-shot before SonarQube starts: chown data/extensions/logs/temp under DATA_DIR to uid 1000 so the SonarQube process can write. Without this, SonarQube often crash-loops on permission errors." },
+    { id: "init-cosmos-permissions", container: "init-cosmos-perms", name: "Cosmos DB permissions", note: "For dev-cosmos. One-shot before the Cosmos emulator starts: remove stale PID/socket lock files and chmod 700 on DATA_DIR/cosmos. Prevents boot failures after unclean shutdowns." },
+    { id: "init-postgres-config", container: "init-postgres-config", name: "Postgres config copy", note: "For dev-postgres. One-shot on compose up: copies repo init-sonar-db.sql into DATA_DIR so Postgres can mount it at /docker-entrypoint-initdb.d (creates the SonarQube DB/user on first empty data dir). Keeps runtime mounts independent of a fixed checkout path." },
+    { id: "init-otel-config", container: "init-otel-config", name: "OTel config copy", note: "For dev-otel-collector. One-shot on compose up: copies repo otel-config.yaml into DATA_DIR. The collector bind-mounts that file as its pipeline config (OTLP, Fluentd, Loki, Jaeger, audit log tails)." },
+    { id: "init-prom-wal", container: "init-prom-wal", name: "Prometheus WAL + config", note: "For dev-prometheus. One-shot before Prometheus starts: clears corrupted WAL/chunks_head under DATA_DIR/prometheus (avoids crash loops after forced stops) and copies repo prometheus.yml into DATA_DIR for the scrape config bind mount." },
+    { id: "init-container-status-exporter-config", container: "init-container-status-exporter-config", name: "Telegraf config copy", note: "For dev-container-status-exporter. One-shot on compose up: copies repo telegraf-docker-status.conf into DATA_DIR. Telegraf mounts it as telegraf.conf to scrape Docker status via the socket proxy." },
+    { id: "init-grafana-config", container: "init-grafana-config", name: "Grafana config copy", note: "For dev-grafana. One-shot on compose up: copies repo grafana/provisioning (datasources + dashboard providers) and grafana/dashboards into DATA_DIR/grafana. Grafana mounts those paths read-only; persistent grafana.db stays in DATA_DIR/grafana." },
+    { id: "init-loki-config", container: "init-loki-config", name: "Loki config copy", note: "For dev-loki. One-shot on compose up: copies repo loki-config.yaml into DATA_DIR. Loki mounts it as /etc/loki/config.yaml; chunk/index data remains under DATA_DIR/loki." },
+    { id: "init-dashboard-config", container: "init-dashboard-config", name: "Dashboard UI copy", note: "For dev-dashboard. One-shot on compose up: copies repo admin_ui/html (this directory UI) into DATA_DIR/admin_ui/html. Nginx serves that copy so the UI survives reboots without depending on a fixed repo path—re-run after editing app.js to refresh." },
+    { id: "init-k3s-sysctl", container: "init-k3s-sysctl", name: "K3s host sysctl", note: "For kubernetes-lab-k3s and all k3s-agent-* nodes. One-shot before the lab starts: raises host fs.inotify max_user_instances/watches (and writes /etc/sysctl.d). Default Linux limits are too low for multi-node k3s + the rest of the stack; without this, agent containerd CRI fails with “too many open files” and port 18080 resets connections." },
+    { id: "init-k3s-config", container: "init-k3s-config", name: "K3s landscape copy", note: "For kubernetes-lab-k3s. One-shot on compose up: copies repo kubernetes/landscape.yaml into DATA_DIR. The server mounts it into K3s auto-deploy manifests so the landscape-lab workloads are applied; keeps the manifest path stable across checkout moves." },
+    { id: "init-k3s-agent-config", container: "init-k3s-agent-config", name: "K3s agent entrypoint copy", note: "For kubernetes-lab-k3s-agent-1/2/3. One-shot on compose up: copies repo kubernetes/agent-entrypoint.sh into DATA_DIR. Each agent mounts that script as /agent-entrypoint.sh to start k3s-agent with a fixed node name." },
+    { id: "init-kubewall-certs-config", container: "init-kubewall-certs-config", name: "KubeWall certs script copy", note: "For kubernetes-lab-kubewall-certs. One-shot on compose up: copies repo kubernetes/kubewall-certs.sh into DATA_DIR so the cert generator container can run without a fixed checkout path." },
+    { id: "kubewall-certs", container: "kubernetes-lab-kubewall-certs", name: "KubeWall TLS certs", note: "For kubernetes-lab-kubewall. One-shot before KubeWall starts: runs kubewall-certs.sh to write a self-signed TLS cert/key under DATA_DIR/kubernetes/kubewall/certs. KubeWall needs HTTPS for Server-Sent Events (cluster data streams stay empty over plain HTTP)." }
   ] }
   ,
+  { name: "Web apps", icon: "globe2", services: [
+    { id: "nginx-proxy-manager", container: "nginx-proxy-manager", name: "Nginx Proxy Manager", note: "Proxy hosts, SSL (Let's Encrypt), redirects; public HTTP/HTTPS on 80/443 (web-apps.yml)", ports: [81, 80, 443], links: [[81, "/", "Open admin UI"]] },
+    { id: "ddns-updater", container: "ddns-updater", name: "DDNS updater", note: "dynv6 dynamic DNS via ddclient; no web interface" },
+    { id: "default-app", container: "default-app", name: "Default site", note: "Fallback static site; forward hostname to default-app:80 in NPM" },
+    { id: "site1-app", container: "web-apps-site1-app-1", name: "Site 1", note: "Static site (2 replicas); forward to site1-app:80 in NPM" },
+    { id: "site2-app", container: "web-apps-site2-app-1", name: "Site 2", note: "Static site; forward to site2-app:80 in NPM" }
+  ] },
   { name: "Kubernetes lab", icon: "hexagon", services: [
     { id: "k8s-landscape", container: "k8s-k3s", name: "Kubernetes landscape", note: "K3s lab: 1 server + 3 agent nodes; gateway, load balancer, CDN, UI, API, database + DR", ports: [18080], links: [[18080, "/", "Open control room"], [18080, "/architecture.svg", "Architecture"]] },
     { id: "k8s-landscape-alt", container: "k8s-agent", name: "Kubernetes landscape (worker ingress)", note: "Same control room through k3s-agent-2 (18081) or k3s-agent-3 (18082)", ports: [18081, 18082], links: [[18081, "/", "Via k3s-agent-2"], [18082, "/", "Via k3s-agent-3"]] },
@@ -59,7 +78,7 @@ const groups = [
     { id: "k8s-cdn", container: "k8s-k3s", name: "CDN stats", note: "Cache hits, hit ratio and object count (JSON API)", ports: [18080], links: [[18080, "/_cdn/stats", "CDN stats (API)"]] },
     { id: "k8s-status", container: "k8s-k3s", name: "Cluster status", note: "Pods, HPAs, metrics, events and database state (JSON API)", ports: [18080], links: [[18080, "/api/status", "Cluster status (API)"]] },
     { id: "k8s-headlamp", container: "k8s-headlamp", name: "Headlamp", note: "Kubernetes web UI on the lab kubeconfig (18084)", ports: [18084], links: [[18084, "/", "Open Headlamp"]] },
-    { id: "k8s-kubewall", container: "k8s-kubewall", name: "KubeWall", note: "Multi-cluster dashboard (HTTPS on 18085; accept self-signed cert)", ports: [18085], links: [[18085, "/", "Open KubeWall (use https://)"]] },
+    { id: "k8s-kubewall", container: "k8s-kubewall", name: "KubeWall", note: "Multi-cluster dashboard (HTTPS on 18085; accept self-signed cert)", ports: [18085], links: [[18085, "/", "Open KubeWall", "https"]] },
     { id: "k8s-kubectl", container: "k8s-k3s", name: "kubectl access", note: "API server on 127.0.0.1:16443; run docker compose exec k3s kubectl get nodes", ports: [16443] }
   ] }
 ];
@@ -81,10 +100,10 @@ function element(tag, className, text) {
   return node;
 }
 
-function serviceUrl(port, path) {
+function serviceUrl(port, path, scheme = "http") {
   const url = new URL(location.href);
   if (port !== null) {
-    url.protocol = "http:";
+    url.protocol = `${scheme}:`;
     url.port = String(port);
   }
   return new URL(path, url.origin).href;
@@ -170,9 +189,9 @@ function render() {
         endpoints.append(line);
       }
       const destinations = element("div", "destinations");
-      for (const [port, path, label] of service.links || []) {
+      for (const [port, path, label, scheme] of service.links || []) {
         const link = element("a", "destination", label);
-        link.href = serviceUrl(port, path);
+        link.href = serviceUrl(port, path, scheme || "http");
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.setAttribute("aria-label", `${service.name}: ${label} (opens in new tab)`);

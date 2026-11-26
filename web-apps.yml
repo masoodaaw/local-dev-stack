@@ -51,51 +51,33 @@ services:
         mode: 0400
     restart: unless-stopped
 
-  # 2. Nginx Gateway & Load Balancer
-  nginx-gateway:
-    image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
-    container_name: nginx-gateway
+  # 2. Nginx Proxy Manager (vhosts, SSL, redirects via Admin UI)
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:2.17.1@sha256:04a9d0835560b9719ab577275f84fe1f713298a1c1e2bdefa034b87f10e062e1
+    container_name: nginx-proxy-manager
     logging: *web-logging
-    healthcheck: *web-healthcheck
+    healthcheck:
+      test: ["CMD", "/bin/check-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     environment:
-      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx/conf.d
-      NGINX_ENVSUBST_FILTER: "^NGINX_"
-      NGINX_PRIMARY_HOSTS: ${NGINX_PRIMARY_HOSTS:?Set NGINX_PRIMARY_HOSTS in .env}
-      NGINX_PRIMARY_CERT_NAME: ${NGINX_PRIMARY_CERT_NAME:?Set NGINX_PRIMARY_CERT_NAME in .env}
-      NGINX_SECONDARY_HOSTS: ${NGINX_SECONDARY_HOSTS:-unused.invalid}
-      NGINX_SECONDARY_CERT_NAME: ${NGINX_SECONDARY_CERT_NAME:-unused.invalid}
-      NGINX_TLS_HOSTS: ${NGINX_TLS_HOSTS:?Set NGINX_TLS_HOSTS in .env}
+      TZ: ${TZ:-UTC}
+      DISABLE_IPV6: ${NPM_DISABLE_IPV6:-false}
     ports:
       - "80:80"
       - "443:443"
+      - "${NPM_ADMIN_PORT:-81}:81"
     volumes:
       - type: bind
-        source: ${REPO_DIR:-.}/nginx/templates
-        target: /etc/nginx/templates
-        read_only: true
+        source: ${DATA_DIR}/nginx-proxy-manager/data
+        target: /data
         bind:
           create_host_path: false
       - type: bind
-        source: ${REPO_DIR:-.}/nginx/ssl-params.conf
-        target: /etc/nginx/custom/ssl-params.conf
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${DATA_DIR}/nginx/logs
-        target: /var/log/nginx
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${DATA_DIR}/certbot/conf
+        source: ${DATA_DIR}/nginx-proxy-manager/letsencrypt
         target: /etc/letsencrypt
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${DATA_DIR}/certbot/www
-        target: /var/www/certbot
-        read_only: true
         bind:
           create_host_path: false
     depends_on:
@@ -106,33 +88,7 @@ services:
       - dev-network
     restart: unless-stopped
 
-  # 3. SSL Certificate Manager
-  certbot:
-    image: neilpang/acme.sh@sha256:475e6c0f1fb861ea8011d7ab9dd3d7490d98540970827ecc36290a3afa411673
-    container_name: certbot
-    logging: *web-logging
-    pid: "service:nginx-gateway"
-    depends_on:
-      nginx-gateway:
-        condition: service_started
-        restart: true
-    environment:
-      - DYNV6_TOKEN=${DYNV6_TOKEN}
-    volumes:
-      - type: bind
-        source: ${DATA_DIR}/certbot/conf
-        target: /acme.sh
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${DATA_DIR}/certbot/www
-        target: /var/www/certbot
-        bind:
-          create_host_path: false
-    command: daemon
-    restart: unless-stopped
-
-  # 4. Default Fallback Website
+  # 3. Default Fallback Website
   default-app:
     image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
     container_name: default-app
@@ -151,7 +107,7 @@ services:
       - dev-network
     restart: unless-stopped
 
-  # 5. Website 1 (Load Balanced across 2 replicas)
+  # 4. Website 1 (Load Balanced across 2 replicas)
   site1-app:
     image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
     logging: *web-logging
@@ -171,7 +127,7 @@ services:
       - dev-network
     restart: unless-stopped
 
-  # 6. Website 2 (Single container)
+  # 5. Website 2 (Single container)
   site2-app:
     image: nginx@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
     logging: *web-logging

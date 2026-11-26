@@ -2,13 +2,11 @@
 
 ![Web apps architecture](./web-apps-architecture.svg)
 
-This guide describes [web-apps.yml](./web-apps.yml). Nginx serves the default
-site for the configured hostnames. `site1-app` (two replicas) and `site2-app`
-are available on the Docker network but are not routed until you add
-hostname-specific Nginx configuration.
-
-The Compose file and Nginx template intentionally contain no deployment
-hostnames or certificate names. Put those values in the ignored `.env` file.
+This guide describes [web-apps.yml](./web-apps.yml). [Nginx Proxy Manager](https://nginxproxymanager.com/)
+terminates HTTP/HTTPS and lets you manage proxy hosts (vhosts), SSL certificates,
+redirects, and streams from a web UI. `default-app`, `site1-app` (two replicas),
+and `site2-app` run on the Docker network; point Proxy Hosts at them by service
+name (for example `default-app:80`).
 
 ## 1. Prerequisites
 
@@ -30,7 +28,7 @@ Copy `.env.example` to `.env` only if `.env` does not already exist. Set
 `DATA_DIR` to an absolute path on the Docker host. `REPO_DIR` is optional and
 defaults to this Compose file's directory.
 
-Configure the updater and Nginx variables in `.env`:
+Configure the updater and Proxy Manager settings in `.env`:
 
 ```dotenv
 DDCLIENT_DAEMON=300
@@ -44,33 +42,25 @@ DDCLIENT_LOGIN=none
 DYNV6_ZONE=your-zone.dynv6.net, *.your-zone.dynv6.net
 DYNV6_TOKEN=your-http-token
 
-NGINX_PRIMARY_HOSTS=your-domain.example
-NGINX_PRIMARY_CERT_NAME=your-domain.example
-NGINX_SECONDARY_HOSTS=www.your-domain.example
-NGINX_SECONDARY_CERT_NAME=www.your-domain.example
-NGINX_TLS_HOSTS=your-domain.example www.your-domain.example
+NPM_ADMIN_PORT=127.0.0.1:81
+# NPM_DISABLE_IPV6=true
+# TZ=UTC
 ```
 
-Replace every example hostname and token with your own. The three
-`NGINX_*_HOSTS` values are space-separated Nginx hostnames; do not quote the
-values. `NGINX_PRIMARY_CERT_NAME` and `NGINX_SECONDARY_CERT_NAME` must match
-the primary name and installed certificate directory for their respective
-ACME certificates. Each certificate must cover every hostname listed for it.
 Keep `.env` and backups private (`chmod 600 .env`). Compose renders the dynv6
 token into a config stored on the Docker host; Docker administrators can read
 it, and `docker compose config` prints it.
 
 Create these directories under `DATA_DIR` before starting: `ddclient`,
-`nginx/logs`, `certbot/conf`, `certbot/www`, `site1-data`, and `site2-data`. The certificate
-manager must be able to write to both `certbot` directories. The bind mounts
-use `create_host_path: false`; Compose fails if sources are absent. Ensure
-`default-site/`, `nginx/templates/`, and `nginx/ssl-params.conf` exist.
+`nginx-proxy-manager/data`, `nginx-proxy-manager/letsencrypt`, `site1-data`,
+and `site2-data`. Bind mounts use `create_host_path: false`; Compose fails if
+sources are absent. Ensure `default-site/` exists under the repo.
 
-The updater bind-mounts `${DATA_DIR}/ddclient` at `/config`, replacing the
-image's anonymous volume. Its active configuration still comes from Compose
-at `/run/ddclient.conf`, and its cache remains ephemeral at
-`/tmp/ddclient.cache`; existing files in the host directory are not used by
-the current command. Protect or remove any obsolete files containing secrets.
+Or run the setup helper:
+
+```bash
+sudo ./web-apps-setup.sh
+```
 
 Create the shared network if it does not exist:
 
@@ -106,102 +96,76 @@ configuration:
 docker compose -f web-apps.yml up -d --force-recreate ddns-updater
 ```
 
-## 4. Issue certificates and start the gateway
+## 4. Start Nginx Proxy Manager and add hosts
 
-Forward TCP 80 and 443 to the Docker host's LAN IP. HTTP port 80 must stay
-reachable for ACME HTTP-01 challenges and renewal. The Nginx template uses
-certificate paths based on the `NGINX_*_CERT_NAME` settings; those certificate
-files must exist before starting the gateway.
-
-For each configured certificate group, issue and install a certificate. Use
-the actual primary hostname from the ignored `.env` in place of
-`your-domain.example` below. Repeat for the secondary certificate group if
-configured, using its primary hostname and certificate directory name:
-
-```bash
-docker exec certbot acme.sh --issue --server letsencrypt --webroot /var/www/certbot -d your-domain.example
-docker exec certbot mkdir -p /acme.sh/live/your-domain.example
-docker exec certbot acme.sh --install-cert -d your-domain.example --ecc \
-  --key-file /acme.sh/live/your-domain.example/privkey.pem \
-  --fullchain-file /acme.sh/live/your-domain.example/fullchain.pem \
-  --reloadcmd 'kill -HUP 1'
-```
-
-On a new deployment, issue the initial HTTP-01 certificate before starting
-Nginx with its HTTPS template. Use a temporary HTTP-only Nginx configuration
-for ACME webroot validation, then restore the committed template after all
-certificate files exist. Do not commit the temporary hostname-specific config.
-
-Start the stack and validate it:
+Forward TCP 80 and 443 to the Docker host's LAN IP. Port 80 must stay
+reachable for Let's Encrypt HTTP-01 challenges.
 
 ```bash
 docker compose -f web-apps.yml up -d
 docker compose -f web-apps.yml ps
-docker exec nginx-gateway nginx -t
 ```
 
-Nginx renders `nginx/templates/sites.conf.template` from `.env` at container
-startup. Recreate it after changing hostnames or certificate directory names:
+Open the admin UI at [http://127.0.0.1:81](http://127.0.0.1:81) (or the host
+binding in `NPM_ADMIN_PORT`). First login defaults:
 
-```bash
-docker compose -f web-apps.yml up -d --force-recreate nginx-gateway
-```
+| Field    | Value               |
+| :------- | :------------------ |
+| Email    | `admin@example.com` |
+| Password | `changeme`          |
 
-The certificate manager shares the gateway's process namespace, allowing
-renewal hooks to reload Nginx without Docker socket access. If the gateway is
-recreated outside Compose, recreate `certbot` as well. Check certificate
-renewal state with `docker exec certbot acme.sh --list`.
+Change the password immediately after first login.
 
-HTTP redirects to HTTPS only for `NGINX_TLS_HOSTS`; unknown hostnames continue
-to use the HTTP fallback. The default TLS server presents the primary
-certificate for unknown HTTPS hostnames, so configure only hostnames covered
-by the supplied certificates.
+### Add a Proxy Host
+
+1. **Hosts → Proxy Hosts → Add Proxy Host**
+2. **Domain Names:** your public hostname(s)
+3. **Scheme / Forward Hostname / Port:** `http` / `default-app` / `80`
+   (or `site1-app` / `site2-app`)
+4. Enable **Block Common Exploits** and **Websockets Support** as needed
+5. On the **SSL** tab, request a new Let's Encrypt certificate (or use an
+   existing one), enable **Force SSL**
+
+Docker DNS resolves service names on `dev-network`, so use the Compose service
+name as the forward hostname — not `localhost` or a host IP.
+
+Example mappings:
+
+| Domain                    | Forward to      |
+| :------------------------ | :-------------- |
+| apex / catch-all site     | `default-app:80` |
+| site 1 content            | `site1-app:80`   |
+| site 2 content            | `site2-app:80`   |
+
+`site1-app` has two replicas; Docker's built-in DNS round-robins that service
+name across both containers.
 
 ## 5. Replace the placeholder sites
 
 The web containers serve static files from `default-site/`,
 `DATA_DIR/site1-data`, and `DATA_DIR/site2-data`. Replace site content with
 the built output of your Angular or React app, or replace a site service with
-your own image and update its Nginx upstream. Add hostname-specific routing
-and a matching certificate before directing a hostname to a site. For an SPA
-using history-based routes, configure its site container's Nginx fallback
-(for example `try_files $uri $uri/ /index.html`). The gateway only proxies
-requests; it does not configure SPA routing. Preserve the `/` health endpoint
-or update the Compose health check if your replacement image lacks `wget` or
-does not serve `/`.
+your own image and update the Proxy Host forward target. For an SPA using
+history-based routes, configure its site container's Nginx fallback
+(for example `try_files $uri $uri/ /index.html`). Preserve the `/` health
+endpoint or update the Compose health check if your replacement image lacks
+`wget` or does not serve `/`.
 
 ## 6. Monitoring, backups, and updates
 
 Web container stdout/stderr is forwarded through the existing Fluent Forward
 collector to Loki. In Grafana, use the Container Logs dashboard or Explore
-with `{service_name="nginx-gateway"}`; substitute `ddns-updater`, `certbot`,
-or a site service name for other logs. Docker health checks cover the Nginx
-gateway and static web containers, but do not restart unhealthy containers or
-check certificate expiry.
+with `{service_name="nginx-proxy-manager"}`; substitute `ddns-updater` or a
+site service name for other logs.
 
-Prometheus metric-based uptime and certificate-expiry alerts are not currently
-operational because the existing Prometheus data has a corruption error.
-Recover Prometheus only after preserving its data, then configure probes,
-Grafana alert rules, and a notification contact point. A separate external
-monitor is needed to detect a complete host, router, or internet outage. Until
-alerting is restored, inspect logs, service health, and certificate expiry
-manually.
-
-Back up `${DATA_DIR}/certbot/conf` (certificate keys and ACME account state),
-site content, Nginx configuration, and `.env` to an access-controlled,
-encrypted, off-host location. For example, after choosing a secure backup
-directory, create a private archive:
+Back up `${DATA_DIR}/nginx-proxy-manager` (SQLite DB, custom Nginx snippets,
+and Let's Encrypt material), site content, and `.env` to an access-controlled,
+encrypted, off-host location:
 
 ```bash
 umask 077
-tar -C "$DATA_DIR" -czf /secure/backup/web-apps-certbot-conf.tar.gz certbot/conf
+tar -C "$DATA_DIR" -czf /secure/backup/web-apps-npm.tar.gz nginx-proxy-manager
 ```
-
-Replace the backup destination with your actual protected location. The
-archive contains private keys: encrypt it and restrict access. Back up `.env`
-separately, also encrypted. Test restoring to an isolated directory before
-overwriting live certificate data. Verify restored key permissions and run
-`nginx -t` before restarting the gateway.
 
 Images are pinned by digest in Compose. Review and test new versions, then
 deliberately update digests to receive security fixes; digest pins do not
@@ -211,20 +175,18 @@ update automatically.
 
 ```bash
 docker compose -f web-apps.yml ps
-docker compose -f web-apps.yml logs --tail=100 ddns-updater nginx-gateway certbot
-docker exec certbot acme.sh --list
-docker exec nginx-gateway nginx -t
+docker compose -f web-apps.yml logs --tail=100 ddns-updater nginx-proxy-manager
 ```
 
 - **DNS wrong:** check the dynv6 zone, token, updater logs, and authoritative
   DNS for the hostname.
 - **HTTP unreachable:** check router forwarding, host LAN IP, upstream NAT,
   ISP restrictions, and firewall. Test from outside the LAN.
-- **HTTPS connection fails:** verify TCP 443 forwarding and that Nginx loaded
-  a valid TLS server block and certificate.
-- **Certificate warning:** ensure the requested hostname is included in the
-  certificate; the fallback does not provide certificates for arbitrary hosts.
-- **ACME renewal fails:** check public TCP 80, DNS, shared webroot access,
-  certificate-manager logs, and expiry.
-- **Site app not shown:** add matching Nginx routing and certificates;
+- **Admin UI unreachable:** confirm `NPM_ADMIN_PORT` and that you are on the
+  host (loopback binding) or have adjusted the publish address.
+- **HTTPS / ACME fails:** verify public TCP 80, DNS A records, and the SSL
+  request in the Proxy Manager UI.
+- **Site app not shown:** create a Proxy Host that forwards to the service;
   starting a site container alone does not publish or route it.
+- **Old nginx-gateway/certbot still running:** stop and remove them after
+  switching — they previously owned ports 80/443.

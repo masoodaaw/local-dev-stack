@@ -22,6 +22,51 @@ x-k3s-agent: &k3s-agent
     K3S_TOKEN: ${K3S_LAB_TOKEN:-landscape-lab-cluster-token}
 
 services:
+  # Host inotify defaults (128 instances) are too low for multi-node k3s + the
+  # rest of the local stack; without this, agent containerd CRI fails with
+  # "too many open files" and host port 18080 resets connections.
+  init-k3s-sysctl:
+    image: alpine:3.20.3
+    container_name: "init-k3s-sysctl"
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - type: bind
+        source: /etc/sysctl.d
+        target: /host-sysctl.d
+        bind:
+          create_host_path: false
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        sysctl -w fs.inotify.max_user_instances=1024
+        sysctl -w fs.inotify.max_user_watches=524288
+        printf '%s\n' \
+          'fs.inotify.max_user_instances=1024' \
+          'fs.inotify.max_user_watches=524288' \
+          > /host-sysctl.d/99-k3s-inotify.conf || true
+
+  init-k3s-config:
+    image: alpine:latest
+    container_name: "init-k3s-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./kubernetes/landscape.yaml
+        target: /src/landscape.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/landscape.yaml /data/landscape.yaml"
+
   k3s:
     container_name: kubernetes-lab-k3s
     <<: *k3s-base
@@ -31,6 +76,11 @@ services:
       --tls-san=k3s --node-taint=k3s.io/lab-control-plane=true:NoSchedule
     ports:
       - "127.0.0.1:16443:6443"
+    depends_on:
+      init-k3s-sysctl:
+        condition: service_completed_successfully
+      init-k3s-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ${DATA_DIR}/kubernetes/k3s
@@ -53,7 +103,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./kubernetes/landscape.yaml
+        source: ${DATA_DIR}/kubernetes/landscape.yaml
         target: /var/lib/rancher/k3s/server/manifests/landscape.yaml
         read_only: true
         bind:
@@ -66,6 +116,24 @@ services:
     networks:
       - kubernetes-lab
 
+  init-k3s-agent-config:
+    image: alpine:latest
+    container_name: "init-k3s-agent-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./kubernetes/agent-entrypoint.sh
+        target: /src/agent-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/agent-entrypoint.sh /data/agent-entrypoint.sh"
+
   k3s-agent-1:
     container_name: kubernetes-lab-k3s-agent-1
     <<: *k3s-agent
@@ -73,9 +141,18 @@ services:
     command: ["k3s-agent-1"]
     ports:
       - "${K8S_LAB_PORT:-127.0.0.1:18080}:80"
+    depends_on:
+      init-k3s-sysctl:
+        condition: service_completed_successfully
+      k3s:
+        condition: service_started
+      lab-bootstrap:
+        condition: service_completed_successfully
+      init-k3s-agent-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./kubernetes/agent-entrypoint.sh
+        source: ${DATA_DIR}/kubernetes/agent-entrypoint.sh
         target: /agent-entrypoint.sh
         read_only: true
         bind:
@@ -117,9 +194,18 @@ services:
     command: ["k3s-agent-2"]
     ports:
       - "${K8S_LAB_PORT_2:-127.0.0.1:18081}:80"
+    depends_on:
+      init-k3s-sysctl:
+        condition: service_completed_successfully
+      k3s:
+        condition: service_started
+      lab-bootstrap:
+        condition: service_completed_successfully
+      init-k3s-agent-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./kubernetes/agent-entrypoint.sh
+        source: ${DATA_DIR}/kubernetes/agent-entrypoint.sh
         target: /agent-entrypoint.sh
         read_only: true
         bind:
@@ -161,9 +247,18 @@ services:
     command: ["k3s-agent-3"]
     ports:
       - "${K8S_LAB_PORT_3:-127.0.0.1:18082}:80"
+    depends_on:
+      init-k3s-sysctl:
+        condition: service_completed_successfully
+      k3s:
+        condition: service_started
+      lab-bootstrap:
+        condition: service_completed_successfully
+      init-k3s-agent-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./kubernetes/agent-entrypoint.sh
+        source: ${DATA_DIR}/kubernetes/agent-entrypoint.sh
         target: /agent-entrypoint.sh
         read_only: true
         bind:
@@ -271,15 +366,36 @@ services:
   # KubeWall needs HTTPS for Server-Sent Events when opened as http(s)://masood-hp:18085/
   # (plain HTTP works for the shell UI but cluster data streams stay empty). Headlamp
   # does not use SSE the same way, which is why it still works over HTTP.
+  init-kubewall-certs-config:
+    image: alpine:latest
+    container_name: "init-kubewall-certs-config"
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ./kubernetes/kubewall-certs.sh
+        target: /src/kubewall-certs.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/kubernetes
+        target: /data
+        bind:
+          create_host_path: false
+    command: sh -c "cp -a /src/kubewall-certs.sh /data/kubewall-certs.sh"
+
   kubewall-certs:
     container_name: kubernetes-lab-kubewall-certs
     image: alpine:3.20.3
     restart: "no"
     environment:
       KUBEWALL_TLS_HOSTS: ${KUBEWALL_TLS_HOSTS:-localhost,masood-hp,127.0.0.1}
+    depends_on:
+      init-kubewall-certs-config:
+        condition: service_completed_successfully
     volumes:
       - type: bind
-        source: ./kubernetes/kubewall-certs.sh
+        source: ${DATA_DIR}/kubernetes/kubewall-certs.sh
         target: /kubewall-certs.sh
         read_only: true
         bind:

@@ -254,14 +254,13 @@ docker compose -f web-apps.yml up -d --force-recreate ddns-updater
 Disable any existing host or router updater for the same zone to avoid
 duplicate updates. No host ddclient installation is needed.
 
-### HTTPS for the default web site
+### HTTPS and virtual hosts (Nginx Proxy Manager)
 
-The gateway serves the default site for configured hostnames. Set its
-hostnames and certificate directory names in the ignored `.env` file.
-Each hostname must be included in the certificate served for it. Forward TCP
-ports 80 and 443 to the Docker host; port 80 must stay reachable for HTTP-01
-certificate issuance and renewal. See the [web apps setup guide](./WEB-APPS-HOWTO.md)
-for certificate installation and operations.
+`nginx-proxy-manager` in `web-apps.yml` owns ports 80/443 and manages proxy
+hosts, redirects, and Let's Encrypt certificates from its admin UI
+(`NPM_ADMIN_PORT`, default `http://127.0.0.1:81`). Forward TCP 80 and 443 to
+the Docker host; port 80 must stay reachable for HTTP-01 issuance and renewal.
+See the [web apps setup guide](./WEB-APPS-HOWTO.md).
 
 ## 🛠️ Accessing Management Dashboards
 
@@ -269,6 +268,7 @@ Once the container stack is running, open the management UIs and dashboards from
 
 | Service            | Host URL                 | Default Credentials                                     | Description / Purpose                                                                           |
 | :----------------- | :----------------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------- |
+| **Nginx Proxy Manager** | [http://127.0.0.1:81] | `admin@example.com` / `changeme` (change on first login) | Manage proxy hosts (vhosts), SSL, and redirects for the web-apps stack.                    |
 | **Adminer**        | [http://localhost:8088]  | use [dev-mariadb] as hostname when logging in to aminer | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
 | **pgAdmin 4**      | [http://localhost:5050]  | `DEV_EMAIL` / `DEV_PASS` from `.env`, for db use `DEV_USER`/`DEV_PASS` | Full-featured PostgreSQL & `pgvector` management dashboard.                                     |
 | **Redis Insight**  | [http://localhost:5540]  | N/A                                                     | Visual key-value inspector and memory performance profiler for Redis (`dev-redis:6379`).        |
