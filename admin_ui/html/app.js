@@ -10,6 +10,7 @@ const groups = [
     { id: "kafka-ui", container: "dev-kafka-ui", name: "Kafka UI", note: "Kafka cluster administration", ports: [8082], links: [[8082, "/", "Open Kafka UI"]] },
     { id: "mailpit", container: "dev-mailpit", name: "Mailpit", note: "Captured email; SMTP on port 1025", ports: [8025, 1025], links: [[8025, "/", "Open inbox"]] },
     { id: "keycloak", container: "dev-keycloak", name: "Keycloak", note: "Identity & access management", ports: [8089], links: [[8089, "/admin/", "Admin console"], [8089, "/realms/master/account/", "Account"]] },
+    { id: "infisical", container: "dev-infisical-proxy", name: "Infisical", note: "HTTPS secrets / env / password store for local projects; uses shared postgres (db infisical) + redis DB 1; accept self-signed cert", ports: [8443], links: [[8443, "/", "Open Infisical", "https"]] },
     { id: "sonarqube", container: "dev-sonarqube", name: "SonarQube", note: "Code quality & security", ports: [9000], links: [[9000, "/", "Open SonarQube"]] }
   ] },
   { name: "Observability", icon: "activity", services: [
@@ -56,6 +57,9 @@ const groups = [
     { id: "init-grafana-config", container: "init-grafana-config", name: "Grafana config copy", note: "For dev-grafana. One-shot on compose up: copies repo grafana/provisioning (datasources + dashboard providers) and grafana/dashboards into DATA_DIR/grafana. Grafana mounts those paths read-only; persistent grafana.db stays in DATA_DIR/grafana." },
     { id: "init-loki-config", container: "init-loki-config", name: "Loki config copy", note: "For dev-loki. One-shot on compose up: copies repo loki-config.yaml into DATA_DIR. Loki mounts it as /etc/loki/config.yaml; chunk/index data remains under DATA_DIR/loki." },
     { id: "init-dashboard-config", container: "init-dashboard-config", name: "Dashboard UI copy", note: "For dev-dashboard. One-shot on compose up: copies repo admin_ui/html (this directory UI) into DATA_DIR/admin_ui/html. Nginx serves that copy so the UI survives reboots without depending on a fixed repo path—re-run after editing app.js to refresh." },
+    { id: "init-infisical-db", container: "init-infisical-db", name: "Infisical database", note: "For dev-infisical. One-shot before Infisical starts: creates database \"infisical\" on shared dev-postgres (owned by DEV_USER) if missing. Fresh volumes also get it from init-sonar-db.sql." },
+    { id: "init-infisical-config", container: "init-infisical-config", name: "Infisical config copy", note: "For dev-infisical-proxy. One-shot on compose up (linux-containers.yml): copies repo infisical/nginx.conf and certs.sh into DATA_DIR/infisical." },
+    { id: "init-infisical-certs", container: "init-infisical-certs", name: "Infisical TLS certs", note: "For dev-infisical-proxy. One-shot before the HTTPS proxy starts: generates a self-signed TLS cert under DATA_DIR/infisical/certs (SANs from INFISICAL_TLS_HOSTS). Infisical is HTTPS-only on host port 8443." },
     { id: "init-k3s-sysctl", container: "init-k3s-sysctl", name: "K3s host sysctl", note: "For kubernetes-lab-k3s and all k3s-agent-* nodes. One-shot before the lab starts: raises host fs.inotify max_user_instances/watches (and writes /etc/sysctl.d). Default Linux limits are too low for multi-node k3s + the rest of the stack; without this, agent containerd CRI fails with “too many open files” and port 18080 resets connections." },
     { id: "init-k3s-config", container: "init-k3s-config", name: "K3s landscape copy", note: "For kubernetes-lab-k3s. One-shot on compose up: copies repo kubernetes/landscape.yaml into DATA_DIR. The server mounts it into K3s auto-deploy manifests so the landscape-lab workloads are applied; keeps the manifest path stable across checkout moves." },
     { id: "init-k3s-agent-config", container: "init-k3s-agent-config", name: "K3s agent entrypoint copy", note: "For kubernetes-lab-k3s-agent-1/2/3. One-shot on compose up: copies repo kubernetes/agent-entrypoint.sh into DATA_DIR. Each agent mounts that script as /agent-entrypoint.sh to start k3s-agent with a fixed node name." },
@@ -69,6 +73,17 @@ const groups = [
     { id: "default-app", container: "default-app", name: "Default site", note: "Fallback static site; forward hostname to default-app:80 in NPM" },
     { id: "site1-app", container: "web-apps-site1-app-1", name: "Site 1", note: "Static site (2 replicas); forward to site1-app:80 in NPM" },
     { id: "site2-app", container: "web-apps-site2-app-1", name: "Site 2", note: "Static site; forward to site2-app:80 in NPM" }
+  ] },
+  { name: "MyEyeRx", icon: "eyeglasses", services: [
+    { id: "myeyerx-prod-web-1", container: "myeyerx-prod-web-1", name: "MyEyeRx prod UI 1", note: "Same-origin · NPM MyEyeRx.app / → myeyerx-prod-web:4080 · /api /up /rails → myeyerx-prod-api:4080" },
+    { id: "myeyerx-prod-web-2", container: "myeyerx-prod-web-2", name: "MyEyeRx prod UI 2", note: "Scale-set · alias myeyerx-prod-web:4080" },
+    { id: "myeyerx-prod-api-1", container: "myeyerx-prod-api-1", name: "MyEyeRx prod API 1", note: "Public via MyEyeRx.app/api · LAN-only api.MyEyeRx.app (NPM Access List) · alias myeyerx-prod-api:4080 · DB MyEyeRx" },
+    { id: "myeyerx-prod-api-2", container: "myeyerx-prod-api-2", name: "MyEyeRx prod API 2", note: "Scale-set · alias myeyerx-prod-api:4080" },
+    { id: "myeyerx-prod-api-3", container: "myeyerx-prod-api-3", name: "MyEyeRx prod API 3", note: "Scale-set · alias myeyerx-prod-api:4080" },
+    { id: "myeyerx-dev-web", container: "myeyerx-dev-web", name: "MyEyeRx dev UI", note: "Same-origin · NPM dev.MyEyeRx.app / → web · /api → myeyerx-dev-api:4080" },
+    { id: "myeyerx-dev-api", container: "myeyerx-dev-api", name: "MyEyeRx dev API", note: "Internal via dev.MyEyeRx.app/api · DB myeyerx_dev" },
+    { id: "myeyerx-qa-web", container: "myeyerx-qa-web", name: "MyEyeRx QA UI", note: "Same-origin · NPM qa.MyEyeRx.app / → web · /api → myeyerx-qa-api:4080" },
+    { id: "myeyerx-qa-api", container: "myeyerx-qa-api", name: "MyEyeRx QA API", note: "Internal via qa.MyEyeRx.app/api · DB myeyerx_qa" }
   ] },
   { name: "Kubernetes lab", icon: "hexagon", services: [
     { id: "k8s-landscape", container: "k8s-k3s", name: "Kubernetes landscape", note: "K3s lab: 1 server + 3 agent nodes; gateway, load balancer, CDN, UI, API, database + DR", ports: [18080], links: [[18080, "/", "Open control room"], [18080, "/architecture.svg", "Architecture"]] },

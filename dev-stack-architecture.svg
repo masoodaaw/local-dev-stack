@@ -67,8 +67,8 @@
         <tspan x="888" dy="35">Loki + Grafana</tspan>
         <tspan x="888" dy="51" class="muted">Code quality: SonarQube</tspan>
     </text>
-    <text x="66" y="722" class="muted">Management UIs: pgAdmin, Adminer, Redis Insight, Kafka UI,
-        RabbitMQ Management</text>
+    <text x="66" y="722" class="muted">Management UIs: Infisical (HTTPS secrets), pgAdmin, Adminer,
+        Redis Insight, Kafka UI, RabbitMQ Management</text>
     <a href="https://github.com/masoodaaw/local-dev-stack" target="_blank" rel="noopener noreferrer">
         <text x="60" y="811" font-size="25" font-weight="600"
             style="fill:#087f73;text-decoration:underline">github.com/masoodaaw/local-dev-stack</text>

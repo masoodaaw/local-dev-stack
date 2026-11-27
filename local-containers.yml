@@ -57,8 +57,16 @@ services:
       POSTGRES_PASSWORD: ${DEV_PASS}
       POSTGRES_DB: devdb
     volumes:
-      - ${DATA_DIR}/postgres:/var/lib/postgresql/data
-      - ./init-sonar-db.sql:/docker-entrypoint-initdb.d/init-sonar-db.sql
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./init-sonar-db.sql
+        target: /docker-entrypoint-initdb.d/init-sonar-db.sql
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -74,7 +82,11 @@ services:
       MSSQL_SA_PASSWORD: "${DEV_PASS}"
       MSSQL_PID: "Developer"
     volumes:
-      - ${DATA_DIR}/sqlserver:/var/opt/mssql/data
+      - type: bind
+        source: ${DATA_DIR}/sqlserver
+        target: /var/opt/mssql/data
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -89,7 +101,11 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${DEV_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${DEV_PASS}
     volumes:
-      - ${DATA_DIR}/mongodb:/data/db
+      - type: bind
+        source: ${DATA_DIR}/mongodb
+        target: /data/db
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -111,7 +127,11 @@ services:
       MARIADB_USER: ${DEV_USER}
       MARIADB_PASSWORD: ${DEV_PASS}
     volumes:
-      - ${DATA_DIR}/mariadb:/var/lib/mysql
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -127,7 +147,11 @@ services:
       AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 2
       AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
     volumes:
-      - ${DATA_DIR}/cosmos:/app/appdata
+      - type: bind
+        source: ${DATA_DIR}/cosmos
+        target: /app/appdata
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -139,7 +163,11 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ${DATA_DIR}/redis:/data
+      - type: bind
+        source: ${DATA_DIR}/redis
+        target: /data
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -166,7 +194,11 @@ services:
           sleep 1
         done
     volumes:
-      - ${DATA_DIR}/redis-audit:/var/log/audit/redis
+      - type: bind
+        source: ${DATA_DIR}/redis-audit
+        target: /var/log/audit/redis
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -190,8 +222,16 @@ services:
           sleep 2
         done
     volumes:
-      - ${DATA_DIR}/postgres:/var/lib/postgresql/data
-      - ${DATA_DIR}/mariadb:/var/lib/mysql
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -213,9 +253,21 @@ services:
       SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonar
       SONAR_SEARCH_JAVAADDITIONALOPTS: "-Dnode.store.allow_mmap=true"
     volumes:
-      - ${DATA_DIR}/sonarqube-data:/opt/sonarqube/data
-      - ${DATA_DIR}/sonarqube-extensions:/opt/sonarqube/extensions
-      - ${DATA_DIR}/sonarqube-logs:/opt/sonarqube/logs
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-data
+        target: /opt/sonarqube/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-extensions
+        target: /opt/sonarqube/extensions
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/sonarqube-logs
+        target: /opt/sonarqube/logs
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -237,8 +289,16 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_DEFAULT_REGION=us-east-1
     volumes:
-      - ${DATA_DIR}/localstack:/var/lib/localstack
-      - //var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${DATA_DIR}/localstack
+        target: /var/lib/localstack
+        bind:
+          create_host_path: false
+      - type: bind
+        source: //var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
     networks:
       - dev-network
   
@@ -251,7 +311,11 @@ services:
       - "8095:8080"
     command: gcloud beta emulators datastore start --host-port=0.0.0.0:8080 --project=dev-project
     volumes:
-      - ${DATA_DIR}/localgcp:/root/.config/gcloud
+      - type: bind
+        source: ${DATA_DIR}/localgcp
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -265,7 +329,11 @@ services:
       - "10001:10001"
       - "10002:10002"
     volumes:
-      - ${DATA_DIR}/azurite:/data
+      - type: bind
+        source: ${DATA_DIR}/azurite
+        target: /data
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -278,7 +346,11 @@ services:
       - "8085:8080"
     command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=dev-project
     volumes:
-      - ${DATA_DIR}/gcp-pubsub:/root/.config/gcloud
+      - type: bind
+        source: ${DATA_DIR}/gcp-pubsub
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -291,7 +363,11 @@ services:
       - "8090:8090"
     command: gcloud beta emulators firestore start --host-port=0.0.0.0:8090
     volumes:
-      - ${DATA_DIR}/gcp-firestore:/root/.config/gcloud
+      - type: bind
+        source: ${DATA_DIR}/gcp-firestore
+        target: /root/.config/gcloud
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -321,7 +397,11 @@ services:
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
     volumes:
-      - ${DATA_DIR}/kafka-1:/tmp/kraft-combined-logs
+      - type: bind
+        source: ${DATA_DIR}/kafka-1
+        target: /tmp/kraft-combined-logs
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -348,7 +428,11 @@ services:
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
     volumes:
-      - ${DATA_DIR}/kafka-2:/tmp/kraft-combined-logs
+      - type: bind
+        source: ${DATA_DIR}/kafka-2
+        target: /tmp/kraft-combined-logs
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -366,7 +450,11 @@ services:
       RABBITMQ_DEFAULT_USER: ${DEV_USER}
       RABBITMQ_DEFAULT_PASS: ${DEV_PASS}
     volumes:
-      - ${DATA_DIR}/rabbitmq-1:/var/lib/rabbitmq
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-1
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -381,7 +469,11 @@ services:
     environment:
       RABBITMQ_ERLANG_COOKIE: "DevClusterCookieSecret123!"
     volumes:
-      - ${DATA_DIR}/rabbitmq-2:/var/lib/rabbitmq
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-2
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -396,7 +488,11 @@ services:
     environment:
       RABBITMQ_ERLANG_COOKIE: "DevClusterCookieSecret123!"
     volumes:
-      - ${DATA_DIR}/rabbitmq-3:/var/lib/rabbitmq
+      - type: bind
+        source: ${DATA_DIR}/rabbitmq-3
+        target: /var/lib/rabbitmq
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -410,10 +506,29 @@ services:
     logging: *default-logging
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
-      - ./otel-config.yaml:/etc/otel-collector-config.yaml
-      - ${DATA_DIR}/postgres:/var/lib/postgresql/data:ro
-      - ${DATA_DIR}/mariadb:/var/lib/mysql:ro
-      - ${DATA_DIR}/redis-audit:/var/log/audit/redis:ro
+      - type: bind
+        source: ./otel-config.yaml
+        target: /etc/otel-collector-config.yaml
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/postgres
+        target: /var/lib/postgresql/data
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/mariadb
+        target: /var/lib/mysql
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/redis-audit
+        target: /var/log/audit/redis
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "4317:4317"
       - "4318:4318"
@@ -443,8 +558,17 @@ services:
     ports:
       - "9091:9090"
     volumes:
-      - ${DATA_DIR}/prometheus:/prometheus
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - type: bind
+        source: ${DATA_DIR}/prometheus
+        target: /prometheus
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        bind:
+          create_host_path: false
     command:
       - --config.file=/etc/prometheus/prometheus.yml
     networks:
@@ -462,10 +586,30 @@ services:
       - --store_container_labels=true
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
+      - type: bind
+        source: /var/run
+        target: /var/run
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /sys
+        target: /sys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /var/lib/docker
+        target: /var/lib/docker
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /dev/disk
+        target: /dev/disk
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -479,7 +623,11 @@ services:
       POST: "0"
       LOG_LEVEL: info
     volumes:
-      - //var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: //var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -491,7 +639,12 @@ services:
     depends_on:
       - docker-socket-proxy
     volumes:
-      - ./telegraf-docker-status.conf:/etc/telegraf/telegraf.conf:ro
+      - type: bind
+        source: ./telegraf-docker-status.conf
+        target: /etc/telegraf/telegraf.conf
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -505,10 +658,29 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${DEV_PASS}
     volumes:
-      - ${DATA_DIR}/grafana:/var/lib/grafana
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - type: bind
+        source: ${DATA_DIR}/grafana
+        target: /var/lib/grafana
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/provisioning/datasources
+        target: /etc/grafana/provisioning/datasources
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/provisioning/dashboards
+        target: /etc/grafana/provisioning/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./grafana/dashboards
+        target: /var/lib/grafana/dashboards
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -521,8 +693,17 @@ services:
     ports:
       - "3100:3100"
     volumes:
-      - ./loki-config.yaml:/etc/loki/config.yaml:ro
-      - ${DATA_DIR}/loki:/loki
+      - type: bind
+        source: ./loki-config.yaml
+        target: /etc/loki/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/loki
+        target: /loki
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -550,7 +731,11 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${DEV_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${DEV_PASS}
     volumes:
-      - ${DATA_DIR}/pgadmin:/var/lib/pgadmin
+      - type: bind
+        source: ${DATA_DIR}/pgadmin
+        target: /var/lib/pgadmin
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -562,7 +747,11 @@ services:
     ports:
       - "5540:5540"
     volumes:
-      - ${DATA_DIR}/redis-insight:/data
+      - type: bind
+        source: ${DATA_DIR}/redis-insight
+        target: /data
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 
@@ -588,6 +777,115 @@ services:
     ports:
       - "1025:1025" # SMTP port
       - "8025:8025" # Web UI Dashboard
+    networks:
+      - dev-network
+
+  # ==========================================
+  # Infisical — project secrets / env values (HTTPS only)
+  # ==========================================
+  init-infisical-certs:
+    image: alpine:3.20.3
+    container_name: "init-infisical-certs"
+    restart: "no"
+    environment:
+      INFISICAL_TLS_HOSTS: ${INFISICAL_TLS_HOSTS:-localhost,127.0.0.1}
+    volumes:
+      - type: bind
+        source: ./infisical/certs.sh
+        target: /certs.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/infisical/certs
+        target: /certs
+        bind:
+          create_host_path: false
+    command: ["sh", "/certs.sh", "/certs"]
+
+  # Ensures the infisical database exists on shared dev-postgres (fresh + existing volumes).
+  init-infisical-db:
+    image: postgres:16-alpine
+    container_name: "init-infisical-db"
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${DEV_USER}
+      PGPASSWORD: ${DEV_PASS}
+      PGDATABASE: postgres
+    depends_on:
+      - postgres
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        i=0
+        until pg_isready -q; do
+          i=$$((i + 1))
+          [ "$$i" -lt 60 ] || exit 1
+          sleep 1
+        done
+        if psql -tAc "SELECT 1 FROM pg_database WHERE datname='infisical'" | grep -q 1; then
+          echo "init-infisical-db: database already exists"
+        else
+          psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE infisical WITH OWNER \"$${PGUSER}\";"
+          echo "init-infisical-db: created database infisical"
+        fi
+    networks:
+      - dev-network
+
+  infisical:
+    image: infisical/infisical:latest
+    container_name: dev-infisical
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      init-infisical-db:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      TELEMETRY_ENABLED: "false"
+      SITE_URL: ${INFISICAL_SITE_URL:-https://localhost:8443}
+      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY:?set INFISICAL_ENCRYPTION_KEY in .env (openssl rand -hex 16)}
+      AUTH_SECRET: ${INFISICAL_AUTH_SECRET:?set INFISICAL_AUTH_SECRET in .env (openssl rand -base64 32)}
+      # Shared stack postgres (database: infisical) + redis logical DB 1
+      DB_CONNECTION_URI: postgresql://${DEV_USER}:${DEV_PASS}@postgres:5432/infisical
+      REDIS_URL: redis://redis:6379/1
+    networks:
+      - dev-network
+
+  infisical-proxy:
+    image: nginx:stable-alpine
+    container_name: dev-infisical-proxy
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      init-infisical-certs:
+        condition: service_completed_successfully
+      infisical:
+        condition: service_started
+    ports:
+      - "${INFISICAL_PORT:-8443}:443"
+    volumes:
+      - type: bind
+        source: ./infisical/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${DATA_DIR}/infisical/certs
+        target: /etc/nginx/certs
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - dev-network
 

@@ -18,8 +18,9 @@ The maintainer will review reports and may ask for additional information. There
 
 This project is intended for local development and is not a production-hardened deployment. In particular:
 
-- Do not expose the stack's database, emulator, Grafana, Loki, or management ports to untrusted networks.
+- Do not expose the stack's database, emulator, Grafana, Loki, Infisical, or management ports to untrusted networks.
 - Replace sample credentials and protect the local `.env` file.
+- Infisical is HTTPS-only (self-signed by default). Keep `INFISICAL_ENCRYPTION_KEY` and `INFISICAL_AUTH_SECRET` private and stable; losing or rotating the encryption key makes stored secrets unreadable.
 - LocalStack is given access to the Docker socket; Docker socket access can grant broad control over the Docker host.
 - Database statement and command logging can record sensitive values. Protect audit files and Loki data, and disable activity logging when it is not needed.
 - Keep Docker images and dependencies updated, and review upstream security guidance for the components you use.

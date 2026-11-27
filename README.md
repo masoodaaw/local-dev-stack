@@ -24,19 +24,22 @@
 |  * SQL Server 2022      * RabbitMQ HA Cluster * Azure Azurite    * Jaeger Tracing   |
 |  * MongoDB & MariaDB                          * GCP PubSub/DS    * Prometheus       |
 |  * Redis & CosmosDB                                              * Loki, Grafana, Sonar |
+|                                                                                     |
+|  [ Secrets ] Infisical (HTTPS-only project env / passwords)                          |
 +-------------------------------------------------------------------------------------+
 
 
 
-An all-in-one Docker Compose environment providing local infrastructure for enterprise application development. Run databases, cloud emulators, event streaming clusters, code quality tools, and OpenTelemetry observability locally. This stack is intended for local development, not production deployment.
+An all-in-one Docker Compose environment providing local infrastructure for enterprise application development. Run databases, cloud emulators, event streaming clusters, code quality tools, secrets management, and OpenTelemetry observability locally. This stack is intended for local development, not production deployment.
 
 ## 📦 What's Included
 
 - **Databases:** PostgreSQL 16 (with `pgvector`), SQL Server 2022, MongoDB 7.0, MariaDB 11, Azure Cosmos DB Emulator, Redis 7.
 - **Cloud Emulators:** AWS LocalStack, Azure Storage (Azurite), GCP Pub/Sub, GCP Firestore.
 - **Event Streaming & Queues:** Apache Kafka Cluster (2-node KRaft), RabbitMQ Cluster (3-node HA).
+- **Secrets:** Infisical (self-hosted, HTTPS-only) for project environment values, API keys, and passwords.
 - **Code Analysis & Observability:** SonarQube Community, OpenTelemetry Collector, Jaeger Tracing, Prometheus, Loki, and Grafana. Compose container stdout/stderr logs flow through the Collector into Loki. Grafana provisions the Loki, Prometheus, and Jaeger data sources and a Container Logs dashboard.
-- **Management GUIs:** Adminer, pgAdmin 4, Redis Insight, Kafka UI, RabbitMQ Management.
+- **Management GUIs:** Adminer, pgAdmin 4, Redis Insight, Kafka UI, RabbitMQ Management, Infisical.
 
 ---
 
@@ -57,6 +60,19 @@ notepad .env
 ```
 
 Set `DATA_DIR` to an absolute path on your machine. The path in `.env.example` is only an example. Change `DEV_PASS` from the sample value before starting the stack. Keep `.env` private; it is excluded from Git.
+
+For Infisical, generate and set the required crypto keys once (keep them stable — changing `INFISICAL_ENCRYPTION_KEY` makes existing secrets unreadable):
+
+```bash
+openssl rand -hex 16    # -> INFISICAL_ENCRYPTION_KEY
+openssl rand -base64 32 # -> INFISICAL_AUTH_SECRET
+```
+
+Create the Infisical TLS certs dir before first start (Postgres/Redis are shared with the stack):
+
+```bash
+mkdir -p "$DATA_DIR"/infisical/certs
+```
 
 ### 3. Create the shared Docker network and start the stack
 
@@ -93,6 +109,7 @@ service; `create_host_path: false` prevents Compose from creating them.
 | `kafka-2` | `kafka-2-secrets`, `kafka-2-config`, `kafka-2-data` | `/etc/kafka/secrets`, `/mnt/shared/config`, `/var/lib/kafka/data` |
 | `jaeger` | `jaeger-tmp` | `/tmp` |
 | `sonarqube` | `sonarqube-temp` | `/opt/sonarqube/temp` |
+| `infisical-proxy` | `infisical/certs` (+ `infisical/nginx.conf` on Linux) | TLS certs for HTTPS-only Infisical UI |
 
 On Linux, set `DATA_DIR` in the shell to the same absolute path used in
 `.env`, then create the directories:
@@ -103,7 +120,8 @@ mkdir -p "$DATA_DIR"/mongodb-configdb "$DATA_DIR"/redis-audit-data \
   "$DATA_DIR"/audit-log-permissions-data "$DATA_DIR"/kafka-1-secrets \
   "$DATA_DIR"/kafka-1-config "$DATA_DIR"/kafka-1-data \
   "$DATA_DIR"/kafka-2-secrets "$DATA_DIR"/kafka-2-config \
-  "$DATA_DIR"/kafka-2-data "$DATA_DIR"/jaeger-tmp "$DATA_DIR"/sonarqube-temp
+  "$DATA_DIR"/kafka-2-data "$DATA_DIR"/jaeger-tmp "$DATA_DIR"/sonarqube-temp \
+  "$DATA_DIR"/infisical/certs
 chmod 700 "$DATA_DIR"/kafka-1-secrets "$DATA_DIR"/kafka-2-secrets
 chmod 1777 "$DATA_DIR"/jaeger-tmp
 chmod 770 "$DATA_DIR"/sonarqube-temp
@@ -262,6 +280,25 @@ hosts, redirects, and Let's Encrypt certificates from its admin UI
 the Docker host; port 80 must stay reachable for HTTP-01 issuance and renewal.
 See the [web apps setup guide](./WEB-APPS-HOWTO.md).
 
+## Infisical (project secrets)
+
+Infisical stores environment values, API keys, and passwords for your local projects. It is **HTTPS-only** on host port `INFISICAL_PORT` (default `8443`) via `dev-infisical-proxy` (nginx TLS). The Infisical app itself listens on HTTP inside the Docker network; TLS is terminated at the proxy with a self-signed certificate (SANs from `INFISICAL_TLS_HOSTS`).
+
+1. Set `INFISICAL_ENCRYPTION_KEY` and `INFISICAL_AUTH_SECRET` in `.env` (see `.env.example`). Infisical reuses stack `postgres` (database `infisical`, ensured by `init-infisical-db`) and `redis` (logical DB `1`).
+2. Create `${DATA_DIR}/infisical/certs`.
+3. Start Postgres/Redis plus Infisical:
+
+```bash
+docker compose -f linux-containers.yml up -d postgres redis init-infisical-db infisical infisical-proxy
+# Windows / Docker Desktop:
+docker compose -f local-containers.yml up -d postgres redis init-infisical-db infisical infisical-proxy
+```
+
+4. Open [https://localhost:8443](https://localhost:8443), accept the self-signed cert, and create the first admin account.
+5. Create a project/environment and store app secrets there; pull them into apps with the Infisical CLI/SDK using your instance URL and machine identity/token.
+
+If you access Infisical by hostname (for example `https://masood-hp:8443`), set `INFISICAL_SITE_URL` and `INFISICAL_TLS_HOSTS` to match, remove `${DATA_DIR}/infisical/certs/tls.*`, and recreate `init-infisical-certs` / `infisical-proxy` so the certificate is regenerated.
+
 ## 🛠️ Accessing Management Dashboards
 
 Once the container stack is running, open the management UIs and dashboards from your host browser:
@@ -269,6 +306,7 @@ Once the container stack is running, open the management UIs and dashboards from
 | Service            | Host URL                 | Default Credentials                                     | Description / Purpose                                                                           |
 | :----------------- | :----------------------- | :------------------------------------------------------ | :---------------------------------------------------------------------------------------------- |
 | **Nginx Proxy Manager** | [http://127.0.0.1:81] | `admin@example.com` / `changeme` (change on first login) | Manage proxy hosts (vhosts), SSL, and redirects for the web-apps stack.                    |
+| **Infisical**      | [https://localhost:8443] | Create the first admin on first visit (accept self-signed TLS) | HTTPS-only secrets manager for project env values, API keys, and passwords. Uses shared `postgres` (db `infisical`) + `redis` DB `1`; TLS under `${DATA_DIR}/infisical/certs`. |
 | **Adminer**        | [http://localhost:8088]  | use [dev-mariadb] as hostname when logging in to aminer | Lightweight database management UI for PostgreSQL, SQL Server, and MariaDB.                     |
 | **pgAdmin 4**      | [http://localhost:5050]  | `DEV_EMAIL` / `DEV_PASS` from `.env`, for db use `DEV_USER`/`DEV_PASS` | Full-featured PostgreSQL & `pgvector` management dashboard.                                     |
 | **Redis Insight**  | [http://localhost:5540]  | N/A                                                     | Visual key-value inspector and memory performance profiler for Redis (`dev-redis:6379`).        |
